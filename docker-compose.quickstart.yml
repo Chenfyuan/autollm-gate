@@ -1,0 +1,57 @@
+# AutoLLM Gate 本地快速体验（直接拉取 GHCR 公开镜像，支持 Intel/AMD 与 Apple 芯片）
+#   1) 生成 .env：sh scripts/gen-env.sh        （或复制 quickstart.env.example 为 .env 并改密码）
+#   2) 启动：    docker compose -f docker-compose.quickstart.yml up -d
+#   3) 打开：    http://localhost:8080
+# 数据库迁移在网关容器启动时自动执行。数据保存在 Docker 数据卷 autollm_pgdata / autollm_redisdata 中。
+name: autollm
+services:
+  gate:
+    image: ${GATE_IMAGE:-ghcr.io/chenfyuan/autollm-gate-gateway}:${GATE_TAG:-latest}
+    build: .   # 本地构建：docker compose -f docker-compose.quickstart.yml build
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autollm:${POSTGRES_PASSWORD}@db:5432/autollm
+      REDIS_URL: redis://redis:6379/0
+      TRUST_PROXY: "0"
+    ports: ["${GATE_PORT:-8080}:8080"]
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  # 假上游：模拟 OpenAI 接口，不发任何真实请求、不花钱。接真实 Key 后可以不管它。
+  mock-upstream:
+    image: ${GATE_IMAGE:-ghcr.io/chenfyuan/autollm-gate-gateway}:${GATE_TAG:-latest}
+    entrypoint: ["uvicorn", "--app-dir", "/app/scripts", "fake_upstream:app", "--host", "0.0.0.0", "--port", "9000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',9000),2)"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: autollm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: autollm
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autollm"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  pgdata: {name: autollm_pgdata}
+  redisdata: {name: autollm_redisdata}

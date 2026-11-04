@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # ---------- 前端构建 ----------
-FROM node:22-alpine AS web
+# 前端产物与 CPU 架构无关，固定在构建机原生架构上构建，多架构构建时更快
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -9,6 +10,9 @@ RUN npm run build
 
 # ---------- 运行镜像 ----------
 FROM python:3.11-slim
+LABEL org.opencontainers.image.source=https://github.com/Chenfyuan/autollm-gate \
+      org.opencontainers.image.description="AutoLLM Gate 网关 + 管理后台 + 租户门户（单镜像）" \
+      org.opencontainers.image.licenses="LicenseRef-All-Rights-Reserved"
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ENV=production STATIC_DIR=/app/static PORT=8080
 # 先按锁文件（含哈希）安装依赖，再无依赖安装本项目，保证构建可复现
@@ -30,6 +34,8 @@ RUN --mount=type=secret,id=core_token,required=false \
     else echo "private core not provided, using default implementation"; fi
 COPY --from=web /web/dist /app/static
 COPY deploy/entrypoint.sh /entrypoint.sh
+# 本地体验用的假上游（不发任何真实请求），quickstart 中以独立容器运行
+COPY scripts/fake_upstream.py /app/scripts/fake_upstream.py
 USER app
 # APP=autollm_admin.main:app（托管版）或 autollm_gate.main:app（纯开源内核）
 ENV APP=autollm_admin.main:app WORKERS=2

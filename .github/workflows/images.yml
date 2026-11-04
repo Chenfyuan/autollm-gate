@@ -1,0 +1,84 @@
+name: Build & push images (GHCR)
+# 公开镜像只包含公开默认内核：本工作流不使用任何私有核心凭据（不传 CORE_REPO / core_token）。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'admin/**'
+      - 'web/**'
+      - 'scripts/fake_upstream.py'
+      - 'deploy/entrypoint.sh'
+      - 'Dockerfile'
+      - 'docker-bake.hcl'
+      - 'requirements.lock'
+      - 'pyproject.toml'
+      - '.github/workflows/images.yml'
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/chenfyuan/autollm-gate-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - id: pyver
+        run: echo "v=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ env.IMAGE }}:${{ steps.pyver.outputs.v }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test (amd64 + arm64)
+        run: |
+          for p in linux/amd64 linux/arm64; do
+            docker run --rm --platform $p -e AUTOLLM_ADMIN_NO_AUTOBUILD=1 --entrypoint python "$IMAGE:sha-${GITHUB_SHA::7}" -c "import platform,autollm_gate.main,autollm_admin.main;print('ok',platform.machine())"
+          done
+  # 干净环境端到端：只用刚推送的 GHCR 镜像 + quickstart 文件启动，跑健康检查、管理员登录和一次对话（假上游）
+  quickstart-e2e:
+    needs: gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clean-room quickstart from GHCR
+        run: |
+          mkdir /tmp/qs && cp docker-compose.quickstart.yml quickstart.env.example scripts/gen-env.sh scripts/quickstart-demo.sh /tmp/qs/
+          cd /tmp/qs
+          sh gen-env.sh
+          echo "GATE_TAG=sha-${GITHUB_SHA::7}" >> .env
+          docker compose -f docker-compose.quickstart.yml pull
+          docker compose -f docker-compose.quickstart.yml up -d --no-build
+          for i in $(seq 60); do curl -fsS localhost:8080/healthz && break; sleep 3; done
+          sh quickstart-demo.sh | tee out.txt
+          grep -q '假上游回复' out.txt
+      - if: failure()
+        run: cd /tmp/qs && docker compose -f docker-compose.quickstart.yml logs

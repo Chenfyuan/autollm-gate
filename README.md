@@ -71,25 +71,46 @@ flowchart LR
   G1 -.告警.-> W[飞书 / 企业微信 / 钉钉 / Slack]
 ```
 
-## 快速开始
+## 快速开始（本地一键体验）
+
+支持 Mac（Apple 芯片 / Intel）、Windows 和 Linux，镜像同时提供 amd64 与 arm64。先安装并打开 [Docker Desktop](https://www.docker.com/products/docker-desktop/)，然后在终端里：
+
+```bash
+mkdir autollm && cd autollm
+curl -fsSLO https://raw.githubusercontent.com/Chenfyuan/autollm-gate/main/docker-compose.quickstart.yml
+curl -fsSLO https://raw.githubusercontent.com/Chenfyuan/autollm-gate/main/quickstart.env.example
+curl -fsSL  https://raw.githubusercontent.com/Chenfyuan/autollm-gate/main/scripts/gen-env.sh -o gen-env.sh
+curl -fsSL  https://raw.githubusercontent.com/Chenfyuan/autollm-gate/main/scripts/quickstart-demo.sh -o quickstart-demo.sh
+sh gen-env.sh                                              # 生成 .env（随机密钥），并打印管理员账号密码
+docker compose -f docker-compose.quickstart.yml up -d      # 拉镜像、启动，数据库自动迁移
+sh quickstart-demo.sh                                      # 可选：用假上游发一次测试请求，不花钱
+```
+
+- 运营后台：<http://localhost:8080/admin>（用 `gen-env.sh` 打印的管理员账号登录）
+- 客户控制台：<http://localhost:8080/console>
+- 健康检查：<http://localhost:8080/healthz>
+
+停止 `docker compose -f docker-compose.quickstart.yml down`；升级 `... pull && ... up -d`；清空数据 `... down -v`。
+
+**手把手的图文步骤、真实 Key 接入、常见问题（端口冲突、Apple 芯片、数据位置）以及甲骨文云新加坡 ARM 服务器部署（只开 80/443、SSH 密钥、HTTPS），见 [部署与配置详解](docs/DEPLOYMENT.md)。**
+
+镜像：`ghcr.io/chenfyuan/autollm-gate-gateway`（`latest` / `sha-<提交号>` / 版本号），一个镜像包含网关、运营后台与客户控制台。本地构建：`docker compose -f docker-compose.quickstart.yml build`；多架构构建：`docker buildx bake`。
+
+调用示例（把 Base URL 换成你的网关地址）：
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8080/v1", api_key="<后台或控制台创建的密钥>")
+resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "你好"}])
+```
+
+## 部署形态（源码部署）
 
 ```bash
 git clone https://github.com/Chenfyuan/autollm-gate.git && cd autollm-gate
 cp .env.example .env        # 按注释填写主密钥、会话密钥、数据库密码、首个管理员
 docker compose up -d --build
 ```
-
-启动后，开发者控制台在 `/`，运营后台在 `/admin`。在后台「上游密钥」里填入各家模型的密钥即可开始路由。
-
-调用示例（把 Base URL 换成你的网关地址）：
-
-```python
-from openai import OpenAI
-client = OpenAI(base_url="https://<你的网关域名>/v1", api_key="<控制台创建的密钥>")
-resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "你好"}])
-```
-
-## 部署形态
 
 在 `.env` 里用 `COMPOSE_PROFILES` 选择：
 
@@ -98,8 +119,6 @@ resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "
 | `single` | 1 个网关 + Postgres + Redis，适合试用 |
 | `ha` | 2 个网关 + nginx 负载均衡，共享 Postgres 与 Redis |
 | `ha,monitoring` | 在 ha 基础上加 Prometheus 与预置告警规则 |
-
-环境变量、TLS、代理头、数据库迁移等细节见 [部署与配置详解](docs/DEPLOYMENT.md)。
 
 ## 界面
 
