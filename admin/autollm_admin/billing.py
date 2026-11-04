@@ -79,7 +79,7 @@ class Pricing:
         self.cfg = cfg
         self.base_models = json.loads(json.dumps(cfg["models"]))  # scoring.yaml 原始定义
         env = lambda k, d: float(os.getenv(k, d))
-        self.markup_pct = env("PLATFORM_MARKUP_PCT", "20") if markup_pct is None else markup_pct
+        self.markup_pct = env("PLATFORM_MARKUP_PCT", "8") if markup_pct is None else markup_pct
         self.byok_req = env("BYOK_FEE_PER_REQUEST_USD", "0") if byok_fee_per_request is None else byok_fee_per_request
         self.byok_1k = env("BYOK_FEE_PER_1K_TOKENS_USD", "0") if byok_fee_per_1k_tokens is None else byok_fee_per_1k_tokens
         self.default_out = int(os.getenv("RESERVE_DEFAULT_OUTPUT_TOKENS", "4096"))

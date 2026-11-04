@@ -159,4 +159,4 @@ cd site && npm ci && npm run build   # 官网，产物在 site/dist
 
 ## 商务联系
 
-预约演示、商用授权与私有部署：chenfyuanl [at] gmail.com。价格见 [官网](https://chenfyuan.github.io/autollm-gate/#pricing) 与 [docs/PRICING.md](docs/PRICING.md)。问题反馈请提 GitHub Issues。
+预约演示、托管服务开通与企业版咨询：chenfyuanl [at] gmail.com。价格见 [官网](https://chenfyuan.github.io/autollm-gate/#pricing) 与 [docs/PRICING.md](docs/PRICING.md)。问题反馈请提 GitHub Issues。
