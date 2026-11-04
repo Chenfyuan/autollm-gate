@@ -11,7 +11,7 @@
 <header class="sticky top-0 z-20 border-b border-slate-200/80 bg-slate-50/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85">
  <div class="wrap flex h-14 items-center justify-between">
   <a href="#" class="flex items-center gap-2 font-semibold"><img src="/logo.svg" class="h-7 w-7" alt="">AutoLLM <span class="font-normal text-sky-600 dark:text-sky-400">Gate</span></a>
-  <nav class="hidden gap-7 text-sm md:flex muted"><a href="#features" class="hover:text-slate-900 dark:hover:text-white">功能</a><a href="#metrics" class="hover:text-slate-900 dark:hover:text-white">实测</a><a href="#how" class="hover:text-slate-900 dark:hover:text-white">工作原理</a><a href="#pricing" class="hover:text-slate-900 dark:hover:text-white">价格</a><a href="#screens" class="hover:text-slate-900 dark:hover:text-white">界面</a></nav>
+  <nav class="hidden gap-6 text-sm md:flex muted"><a href="#features" class="navl">功能</a><a href="#scenarios" class="navl">场景</a><a href="#providers" class="navl">支持的模型</a><a href="#quickstart" class="navl">快速开始</a><a href="#metrics" class="navl">实测</a><a href="#deploy" class="navl">部署</a><a href="#faq" class="navl">常见问题</a><a href="#changelog" class="navl">更新日志</a></nav>
   <div class="flex items-center gap-2">
    <button id="theme" aria-label="切换深浅色" class="rounded-lg border border-slate-200 p-2 dark:border-slate-700"><svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
    <a href="#cta" class="rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-slate-700 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200">申请试用</a>
@@ -20,8 +20,8 @@
 </header>
 
 <main>
-<section class="wrap pt-16 pb-12 sm:pt-24 text-center">
- <p class="mx-auto inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs muted dark:border-slate-800"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>v0.2 · 兼容 OpenAI / Anthropic / Responses 协议</p>
+<section class="hero relative overflow-hidden"><div class="wrap pt-16 pb-12 sm:pt-24 text-center">
+ <p class="mx-auto inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs muted dark:border-slate-800"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>v0.3 · 密钥策略 · 请求日志 · 审计日志</p>
  <h1 class="mx-auto mt-6 max-w-3xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">一个地址接入所有大模型，<br class="hidden sm:block">按实际用量收费</h1>
  <p class="mx-auto mt-5 max-w-2xl text-lg muted">AutoLLM Gate 是放在你的应用和模型厂商之间的商用网关：自动选模型，上游出错自动切换，每次请求按 tokens 精确计费，自带开发者控制台和运营后台。</p>
  <div class="mt-8 flex flex-wrap justify-center gap-3">
@@ -32,21 +32,103 @@
   <div class="flex items-center gap-1.5 border-b border-slate-200 bg-slate-100 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900"><span class="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></span><span class="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></span><span class="h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-700"></span><span class="ml-3 text-xs muted">开发者控制台 · 用量分析（演示数据）</span></div>
   <img src="/shots/tenant-usage.png" alt="开发者控制台用量分析" class="w-full" loading="eager">
  </div>
-</section>
+</div></section>
 
 <section id="features" class="wrap py-20">
  <p class="eyebrow">功能</p><h2 class="h2 mt-2">把路由、容灾和计费做成一套</h2>
  <p class="mt-3 max-w-2xl muted">不用再分别维护多家 SDK、重试逻辑和账单脚本。</p>
  <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-  <div class="card p-6"><h3 class="font-semibold">三种协议，一个地址</h3><p class="mt-2 text-sm muted">/v1/chat/completions、/v1/messages、/v1/responses，流式与非流式都支持。现有 SDK 改 Base URL 即可。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">model: "auto"</h3><p class="mt-2 text-sm muted">按任务类型和成本选择模型；同一会话固定在同一模型上，多实例之间保持一致。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">失败自动切换</h3><p class="mt-2 text-sm muted">上游 429、5xx、超时时切到下一个候选模型；参数错误直接返回，不误切。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">按上游熔断</h3><p class="mt-2 text-sm muted">连续失败的上游暂停调用，冷却后放一个探测请求，成功即恢复。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">按量精确计费</h3><p class="mt-2 text-sm muted">请求前原子冻结额度，完成后按实际 tokens 结算，并发下不透支。平台与租户两级加价。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">控制台与后台</h3><p class="mt-2 text-sm muted">用户自助注册、建密钥、看用量和账单；运营侧看收入、成本、租户与上游健康状况。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">监控告警</h3><p class="mt-2 text-sm muted">错误率突增、余额不足、额度将满，推送到飞书、企业微信、钉钉、Slack 或通用 Webhook。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">限流</h3><p class="mt-2 text-sm muted">注册、登录按 IP 限流，API 调用按密钥限制每分钟请求数。</p></div>
-  <div class="card p-6"><h3 class="font-semibold">密钥加密存储</h3><p class="mt-2 text-sm muted">上游密钥加密落库，界面只显示末 4 位；用户密钥只在创建时显示一次。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">三种协议，一个地址</h3><p class="mt-2 text-sm muted">/v1/chat/completions、/v1/messages、/v1/responses，流式与非流式都支持；另有 /v1/embeddings 和 /v1/models。现有 SDK 改 Base URL 即可。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">model: "auto"</h3><p class="mt-2 text-sm muted">按任务类型和成本选择模型；同一会话固定在同一模型上，多实例之间保持一致。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">失败自动切换</h3><p class="mt-2 text-sm muted">上游 429、5xx、超时时切到下一个候选模型；参数错误直接返回，不误切。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">按上游熔断</h3><p class="mt-2 text-sm muted">连续失败的上游暂停调用，冷却后放一个探测请求，成功即恢复。v0.3 起一个实例熔断，其他实例同步跳过。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">按量精确计费</h3><p class="mt-2 text-sm muted">请求前原子冻结额度，完成后按实际 tokens 结算，并发下不透支。平台与租户两级加价。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">控制台与后台</h3><p class="mt-2 text-sm muted">用户自助注册、建密钥、看用量和账单；运营侧看收入、成本、租户与上游健康状况。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">监控告警</h3><p class="mt-2 text-sm muted">错误率突增、余额不足、额度将满，推送到飞书、企业微信、钉钉、Slack 或通用 Webhook。</p></div>
+  <div class="card p-6 reveal" id="f-keys"><span class="new">v0.3</span><h3 class="font-semibold">密钥访问策略</h3><p class="mt-2 text-sm muted">每个密钥单独设置可用模型（支持 <code class="font-mono">deepseek*</code> 这样的前缀）、IP / CIDR 白名单、有效期、消费上限和每分钟请求数。改完立即生效，不用换密钥。</p></div>
+  <div class="card p-6 reveal" id="f-logs"><span class="new">v0.3</span><h3 class="font-semibold">请求日志</h3><p class="mt-2 text-sm muted">每次调用的模型、上游、tokens、费用、耗时和状态都能查。按模型、状态、日期筛选，一键导出 CSV。租户只能看到自己的。</p></div>
+  <div class="card p-6 reveal" id="f-audit"><span class="new">v0.3</span><h3 class="font-semibold">审计日志</h3><p class="mt-2 text-sm muted">后台和控制台的每次写操作都会留下记录：谁、什么时候、从哪个 IP、改了什么。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">限流</h3><p class="mt-2 text-sm muted">注册、登录按 IP 限流，API 调用按密钥限制每分钟请求数，多实例共用一个计数。</p></div>
+  <div class="card p-6 reveal"><h3 class="font-semibold">密钥加密存储</h3><p class="mt-2 text-sm muted">上游密钥加密落库，界面只显示末 4 位；用户密钥只在创建时显示一次。</p></div>
+ </div>
+</section>
+
+<section id="scenarios" class="border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-slate-900/40">
+ <div class="wrap">
+  <p class="eyebrow">适用场景</p><h2 class="h2 mt-2">谁会用到它</h2>
+  <div class="mt-10 grid gap-4 md:grid-cols-3">
+   <div class="card p-6 reveal"><h3 class="font-semibold">对外提供模型 API 的团队</h3><p class="mt-2 text-sm muted">给客户发密钥、预充值、按用量扣费，自带开发者控制台和运营后台，不用自己写计费系统。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">公司内部统一出口</h3><p class="mt-2 text-sm muted">各业务线共用一个网关。每个项目一个密钥，限定可用模型和预算，账单按项目拆分，操作有审计。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">需要容灾的线上应用</h3><p class="mt-2 text-sm muted">某家上游限流或宕机时自动换到下一个候选，用户侧无感；熔断后不再浪费请求去试。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">想省成本的应用</h3><p class="mt-2 text-sm muted">用 <code class="font-mono">model: "auto"</code>，简单对话交给便宜的模型，编程和推理交给更强的模型；每次选择的理由写在响应头里。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">编程工具接入</h3><p class="mt-2 text-sm muted">兼容 Anthropic Messages 和 OpenAI Responses 协议，Claude Code、Codex 类工具改个地址就能用。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">自建模型统一管理</h3><p class="mt-2 text-sm muted">vLLM 等 OpenAI 兼容的自建服务可作为一个上游接入，和商用模型一起参与路由、计量。</p></div>
+  </div>
+ </div>
+</section>
+
+<section id="providers" class="wrap py-20">
+ <p class="eyebrow">支持的上游</p><h2 class="h2 mt-2">目前已经接好的上游</h2>
+ <p class="mt-3 max-w-3xl muted">下面是代码里已经实现适配的上游。所有适配目前只在模拟上游上测试过，<strong class="font-medium text-slate-900 dark:text-white">还没有用真实密钥做端到端实测</strong>。</p>
+ <div class="mt-8 overflow-x-auto card">
+  <table class="w-full text-sm">
+   <thead class="text-left muted"><tr class="border-b border-slate-200 dark:border-slate-800"><th class="px-5 py-3 font-medium">上游</th><th class="px-5 py-3 font-medium">对话</th><th class="px-5 py-3 font-medium">流式</th><th class="px-5 py-3 font-medium">工具调用</th><th class="px-5 py-3 font-medium">Embeddings</th></tr></thead>
+   <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+    <tr><td class="px-5 py-3 font-medium">OpenAI</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td></tr>
+    <tr><td class="px-5 py-3 font-medium">Anthropic</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3 muted">—</td></tr>
+    <tr><td class="px-5 py-3 font-medium">Google Gemini</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3 muted">—</td></tr>
+    <tr><td class="px-5 py-3 font-medium">DeepSeek</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3 muted">—</td></tr>
+    <tr><td class="px-5 py-3 font-medium">OpenAI 兼容自建（vLLM 等）</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td><td class="px-5 py-3">✓</td></tr>
+    <tr><td class="px-5 py-3 font-medium muted">Azure OpenAI · Bedrock · Ollama 原生</td><td class="px-5 py-3" colspan="4"><span class="soon">规划中</span></td></tr>
+   </tbody>
+  </table>
+ </div>
+ <p class="mt-4 text-sm muted">图像、音频接口 <span class="soon">规划中</span></p>
+</section>
+
+<section id="quickstart" class="border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-slate-900/40">
+ <div class="wrap">
+  <p class="eyebrow">快速开始</p><h2 class="h2 mt-2">三步接入</h2>
+  <ol class="mt-8 grid gap-4 md:grid-cols-3 text-sm">
+   <li class="card p-5"><span class="font-mono text-sky-600 dark:text-sky-400">1</span><p class="mt-2"><strong class="font-medium">部署网关</strong></p><p class="muted mt-1">私有部署用 <code class="font-mono">docker compose up -d</code>；或联系我们开通试用环境。</p></li>
+   <li class="card p-5"><span class="font-mono text-sky-600 dark:text-sky-400">2</span><p class="mt-2"><strong class="font-medium">创建密钥</strong></p><p class="muted mt-1">在开发者控制台创建 API 密钥，按需设置可用模型、有效期、消费上限。</p></li>
+   <li class="card p-5"><span class="font-mono text-sky-600 dark:text-sky-400">3</span><p class="mt-2"><strong class="font-medium">改 Base URL</strong></p><p class="muted mt-1">把 SDK 的地址换成网关地址，模型写 <code class="font-mono">auto</code> 或具体模型名。</p></li>
+  </ol>
+  <div class="mt-8 card overflow-hidden">
+   <div class="flex gap-1 overflow-x-auto whitespace-nowrap border-b border-slate-200 px-3 pt-3 dark:border-slate-800" role="tablist">
+    <button class="ctab" role="tab" aria-selected="true" data-code="curl">curl</button>
+    <button class="ctab" role="tab" aria-selected="false" data-code="py">Python</button>
+    <button class="ctab" role="tab" aria-selected="false" data-code="node">Node.js</button>
+    <button class="ctab" role="tab" aria-selected="false" data-code="claude">Anthropic 协议</button>
+    <button id="copy" class="ml-auto mb-2 shrink-0 rounded-md border border-slate-200 px-2.5 text-xs muted dark:border-slate-700">复制</button>
+   </div>
+<pre class="code" data-panel="curl"><code>curl https://&lt;你的网关域名&gt;/v1/chat/completions \
+  -H "Authorization: Bearer $AUTOLLM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "auto", "messages": [{"role": "user", "content": "你好"}]}' -i
+# 响应头 X-Router-Model / X-Router-Reason 说明选了哪个模型、为什么</code></pre>
+<pre class="code hidden" data-panel="py"><code>from openai import OpenAI
+
+client = OpenAI(base_url="https://&lt;你的网关域名&gt;/v1", api_key="&lt;控制台创建的密钥&gt;")
+r = client.chat.completions.create(
+    model="auto",  # 或 auto:quality_first / auto:cost_optimized / 具体模型名
+    messages=[{"role": "user", "content": "写一个快速排序"}],
+)
+print(r.choices[0].message.content)</code></pre>
+<pre class="code hidden" data-panel="node"><code>import OpenAI from "openai";
+
+const client = new OpenAI({ baseURL: "https://&lt;你的网关域名&gt;/v1", apiKey: process.env.AUTOLLM_API_KEY });
+const stream = await client.chat.completions.create({
+  model: "auto",
+  messages: [{ role: "user", content: "你好" }],
+  stream: true,
+});
+for await (const chunk of stream) process.stdout.write(chunk.choices[0]?.delta?.content ?? "");</code></pre>
+<pre class="code hidden" data-panel="claude"><code># Anthropic Messages 协议（Claude Code 等工具）
+export ANTHROPIC_BASE_URL="https://&lt;你的网关域名&gt;"
+export ANTHROPIC_AUTH_TOKEN="&lt;控制台创建的密钥&gt;"
+# 请求会发到 /v1/messages，由网关路由到合适的上游</code></pre>
+  </div>
  </div>
 </section>
 
@@ -55,19 +137,27 @@
   <p class="eyebrow">实测</p><h2 class="h2 mt-2">压测与故障演练结果</h2>
   <p class="mt-3 max-w-3xl muted">2 个网关实例 + nginx + Postgres + Redis，单机 Docker。上游为本地模拟服务（约 40ms 固定延迟），测的是网关自身的吞吐与容灾，不代表真实模型的响应时间。</p>
   <div class="mt-10 grid gap-4 lg:grid-cols-2">
-   <div class="card p-6"><p class="text-sm muted">并发 50，持续 60 秒</p>
+   <div class="card p-6 reveal"><p class="text-sm muted">并发 50，持续 60 秒</p>
     <dl class="mt-5 grid grid-cols-2 gap-y-5 sm:grid-cols-4">
      <div><dt class="text-xs muted">请求数</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">23,496</dd></div>
      <div><dt class="text-xs muted">吞吐</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">390.7<span class="text-sm font-normal muted"> RPS</span></dd></div>
      <div><dt class="text-xs muted">p50 / p95</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">109<span class="text-sm font-normal muted"> / 236ms</span></dd></div>
      <div><dt class="text-xs muted">错误率</dt><dd class="mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">0%</dd></div>
     </dl></div>
-   <div class="card p-6"><p class="text-sm muted">运行中停掉一家上游 30 秒（20 RPS）</p>
+   <div class="card p-6 reveal"><p class="text-sm muted">运行中停掉一家上游 30 秒（20 RPS）</p>
     <dl class="mt-5 grid grid-cols-2 gap-y-5 sm:grid-cols-4">
      <div><dt class="text-xs muted">失败请求</dt><dd class="mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">0<span class="text-sm font-normal muted"> / 1,379</span></dd></div>
      <div><dt class="text-xs muted">开始切换</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">0.15<span class="text-sm font-normal muted"> 秒</span></dd></div>
      <div><dt class="text-xs muted">熔断生效</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">0.71<span class="text-sm font-normal muted"> 秒</span></dd></div>
      <div><dt class="text-xs muted">恢复回切</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">0.43<span class="text-sm font-normal muted"> 秒</span></dd></div>
+    </dl></div>
+   <div class="card p-6 lg:col-span-2"><p class="text-sm muted">v0.3 回归：并发 50，持续 30 秒，每次请求都经过密钥策略检查</p>
+    <dl class="mt-5 grid grid-cols-2 gap-y-5 sm:grid-cols-5">
+     <div><dt class="text-xs muted">请求数</dt><dd class="mt-1 text-2xl font-semibold tabular-nums" data-count="9175">9,175</dd></div>
+     <div><dt class="text-xs muted">吞吐</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">304.3<span class="text-sm font-normal muted"> RPS</span></dd></div>
+     <div><dt class="text-xs muted">p50 / p95</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">144<span class="text-sm font-normal muted"> / 324ms</span></dd></div>
+     <div><dt class="text-xs muted">错误率</dt><dd class="mt-1 text-2xl font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">0%</dd></div>
+     <div><dt class="text-xs muted">结束后冻结额</dt><dd class="mt-1 text-2xl font-semibold tabular-nums">0</dd></div>
     </dl></div>
   </div>
  </div>
@@ -92,14 +182,33 @@ client.chat.completions.create(
     model=<span class="text-emerald-300">"auto"</span>,
     messages=[{<span class="text-emerald-300">"role"</span>: <span class="text-emerald-300">"user"</span>, <span class="text-emerald-300">"content"</span>: <span class="text-emerald-300">"你好"</span>}],
 )</code></pre></div>
-  <div class="card p-6"><h3 class="font-semibold">三种部署形态</h3>
-   <ul class="mt-4 space-y-4 text-sm">
-    <li><span class="font-mono font-medium">single</span><p class="muted mt-1">1 个网关 + Postgres + Redis，适合试用。</p></li>
-    <li><span class="font-mono font-medium">ha</span><p class="muted mt-1">2 个网关 + nginx 负载均衡，共享数据库与 Redis。</p></li>
-    <li><span class="font-mono font-medium">ha,monitoring</span><p class="muted mt-1">在 ha 基础上加 Prometheus 与预置告警规则。</p></li>
+  <div class="card p-6 reveal"><h3 class="font-semibold">每次响应都告诉你为什么</h3>
+   <ul class="mt-4 space-y-3 text-sm font-mono">
+    <li><span class="muted">X-Router-Model:</span> gpt-4o-mini</li>
+    <li><span class="muted">X-Router-Strategy:</span> cost_optimized</li>
+    <li><span class="muted">X-Router-Task:</span> chat</li>
+    <li><span class="muted">X-Router-Attempts:</span> 1</li>
    </ul>
-   <p class="mt-5 text-sm muted">一条 <code class="font-mono">docker compose up -d</code> 启动，数据库迁移自动执行。</p></div>
+   <p class="mt-5 text-sm muted">发生切换时，原因里会写明前一个上游失败的原因。<a href="#deploy" class="text-sky-600 dark:text-sky-400">部署方式对比 →</a></p></div>
  </div>
+</section>
+
+<section id="deploy" class="wrap py-20">
+ <p class="eyebrow">部署方式</p><h2 class="h2 mt-2">三种形态怎么选</h2>
+ <div class="mt-8 overflow-x-auto card">
+  <table class="w-full text-sm">
+   <thead class="text-left muted"><tr class="border-b border-slate-200 dark:border-slate-800"><th class="px-5 py-3 font-medium"></th><th class="px-5 py-3 font-medium font-mono">single</th><th class="px-5 py-3 font-medium font-mono">ha</th><th class="px-5 py-3 font-medium font-mono">ha,monitoring</th></tr></thead>
+   <tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+    <tr><td class="px-5 py-3 muted">网关实例</td><td class="px-5 py-3">1</td><td class="px-5 py-3">2 + nginx 负载均衡</td><td class="px-5 py-3">2 + nginx 负载均衡</td></tr>
+    <tr><td class="px-5 py-3 muted">数据存储</td><td class="px-5 py-3">Postgres + Redis</td><td class="px-5 py-3">共享 Postgres + Redis</td><td class="px-5 py-3">共享 Postgres + Redis</td></tr>
+    <tr><td class="px-5 py-3 muted">单实例故障</td><td class="px-5 py-3">服务中断</td><td class="px-5 py-3">另一实例继续服务</td><td class="px-5 py-3">另一实例继续服务</td></tr>
+    <tr><td class="px-5 py-3 muted">熔断 / 会话 / 限流</td><td class="px-5 py-3">本实例</td><td class="px-5 py-3">经 Redis 多实例共享</td><td class="px-5 py-3">经 Redis 多实例共享</td></tr>
+    <tr><td class="px-5 py-3 muted">监控</td><td class="px-5 py-3">/metrics 接口</td><td class="px-5 py-3">/metrics 接口</td><td class="px-5 py-3">Prometheus + 预置告警规则</td></tr>
+    <tr><td class="px-5 py-3 muted">适合</td><td class="px-5 py-3">试用、开发</td><td class="px-5 py-3">正式环境</td><td class="px-5 py-3">需要监控的正式环境</td></tr>
+   </tbody>
+  </table>
+ </div>
+ <p class="mt-4 text-sm muted">Postgres、Redis、nginx 本身的冗余和内置 TLS <span class="soon">规划中</span>，目前需要在前面自行配置 TLS。</p>
 </section>
 
 <section id="pricing" class="border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-slate-900/40">
@@ -107,9 +216,9 @@ client.chat.completions.create(
   <p class="eyebrow">价格</p><h2 class="h2 mt-2">价格方案</h2>
   <div class="mt-4 inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">占位内容：价格尚未确定，以下仅为方案结构示意。</div>
   <div class="mt-8 grid gap-4 md:grid-cols-3">
-   <div class="card p-6"><h3 class="font-semibold">按量付费</h3><p class="mt-3 text-3xl font-semibold">待定</p><p class="mt-3 text-sm muted">使用平台统一的上游密钥，按模型价格加平台加价计费。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">按量付费</h3><p class="mt-3 text-3xl font-semibold">待定</p><p class="mt-3 text-sm muted">使用平台统一的上游密钥，按模型价格加平台加价计费。</p></div>
    <div class="card p-6 ring-2 ring-sky-500"><h3 class="font-semibold">自带密钥</h3><p class="mt-3 text-3xl font-semibold">待定</p><p class="mt-3 text-sm muted">使用你自己的厂商密钥，平台只收服务费。</p></div>
-   <div class="card p-6"><h3 class="font-semibold">私有部署</h3><p class="mt-3 text-3xl font-semibold">面议</p><p class="mt-3 text-sm muted">部署在你自己的服务器上，数据不出内网。</p></div>
+   <div class="card p-6 reveal"><h3 class="font-semibold">私有部署</h3><p class="mt-3 text-3xl font-semibold">面议</p><p class="mt-3 text-sm muted">部署在你自己的服务器上，数据不出内网。</p></div>
   </div>
   <p class="mt-6 text-sm muted">在线充值（微信支付 / 支付宝 / Stripe）<span class="ml-1 rounded bg-slate-200 px-1.5 py-0.5 text-xs dark:bg-slate-800">规划中</span>，目前尚不可用。</p>
  </div>
@@ -123,11 +232,42 @@ client.chat.completions.create(
   <button role="tab" aria-selected="false" data-shot="/shots/admin-upstreams.png" data-cap="上游密钥：加密存储，只显示末 4 位" class="tab">上游密钥</button>
   <button role="tab" aria-selected="false" data-shot="/shots/admin-tenants.png" data-cap="租户管理：余额、本月消费与请求量" class="tab">租户管理</button>
   <button role="tab" aria-selected="false" data-shot="/shots/tenant-billing.png" data-cap="账单明细：每次请求的模型、tokens 与费用" class="tab">账单明细</button>
+  <button role="tab" aria-selected="false" data-shot="/shots/tenant-keys-policy.png" data-cap="API 密钥：每个密钥的可用模型、IP 白名单、有效期与消费上限" class="tab">密钥策略</button>
+  <button role="tab" aria-selected="false" data-shot="/shots/admin-request-logs.png" data-cap="请求日志：按条件筛选，导出 CSV" class="tab">请求日志</button>
+  <button role="tab" aria-selected="false" data-shot="/shots/admin-audit.png" data-cap="审计日志：后台写操作留痕" class="tab">审计日志</button>
  </div>
  <figure class="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800">
   <img id="shot" src="/shots/admin-overview.png" alt="运营概览" class="w-full">
  </figure>
  <figcaption class="mt-3 text-sm muted"><span id="shotcap">运营概览：收入、毛利、请求量与收入最高的租户</span>（演示数据）</figcaption>
+</section>
+
+<section id="faq" class="border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-slate-900/40">
+ <div class="wrap grid gap-10 lg:grid-cols-[1fr_2fr]">
+  <div><p class="eyebrow">常见问题</p><h2 class="h2 mt-2">你可能想问</h2></div>
+  <div class="divide-y divide-slate-200 dark:divide-slate-800">
+   <details class="faq"><summary>现在能直接收钱吗？</summary><p>还不能。余额、预授权、结算、账单都已完成，但微信支付、支付宝、Stripe 等在线支付渠道还在规划中，目前只能由管理员在后台手工入账。</p></details>
+   <details class="faq"><summary>接过真实的大模型吗？</summary><p>适配代码已经写好，但目前只在模拟上游上测试过，还没有用真实密钥做端到端实测。页面上的性能数字测的是网关本身，不代表真实模型的响应时间。</p></details>
+   <details class="faq"><summary>model: "auto" 是怎么选模型的？</summary><p>先根据最近一条用户消息判断任务类型（对话、编程、推理、长上下文），再按策略综合质量、价格、速度打分，只在你配置了密钥的上游里选。选择结果和理由会写在响应头里。</p></details>
+   <details class="faq"><summary>会不会扣成负数？</summary><p>不会。请求前按候选模型里最贵的价格原子冻结余额，余额不够直接拒绝；完成后按实际 tokens 结算，多退少补。100 路并发、余额只够 10 次的测试里恰好成功 10 次。</p></details>
+   <details class="faq"><summary>可以用自己的厂商密钥吗？</summary><p>可以。租户可以配置自带密钥，优先使用；平台只按设置收取服务费，也可以设为免费。</p></details>
+   <details class="faq"><summary>我的上游密钥安全吗？</summary><p>上游密钥加密后存入数据库，界面和接口只显示末 4 位。用户的 API 密钥只保存哈希值，只在创建时显示一次。</p></details>
+   <details class="faq"><summary>源码可以拿来用吗？</summary><p>不可以。仓库公开只是方便查看，保留所有权利，未经书面许可不得使用、复制、修改或分发。核心路由和计价增强以私有插件提供。</p></details>
+  </div>
+ </div>
+</section>
+
+<section id="changelog" class="wrap py-20">
+ <p class="eyebrow">更新日志</p><h2 class="h2 mt-2">版本记录</h2>
+ <ol class="mt-8 space-y-6 border-l border-slate-200 pl-6 dark:border-slate-800">
+  <li class="relative"><span class="dot"></span><p class="font-semibold">v0.3 <span class="ml-2 text-sm font-normal muted">2026-11</span></p>
+   <ul class="mt-2 list-disc space-y-1 pl-5 text-sm muted"><li>密钥访问策略：模型白名单、IP 白名单、有效期、消费上限</li><li>请求日志筛选、分页与 CSV 导出；审计日志</li><li>/v1/embeddings 接口</li><li>多实例共享熔断状态</li><li>告警 Webhook 直连已校验的 IP，防 DNS 重绑定</li><li>路由与计价改为插件接口</li></ul></li>
+  <li class="relative"><span class="dot"></span><p class="font-semibold">v0.2 <span class="ml-2 text-sm font-normal muted">2026-11</span></p>
+   <ul class="mt-2 list-disc space-y-1 pl-5 text-sm muted"><li>原子预授权计费、租户自助控制台、多管理员</li><li>监控告警（飞书 / 企业微信 / 钉钉 / Slack）</li><li>双实例高可用部署、Prometheus 指标</li></ul></li>
+  <li class="relative"><span class="dot"></span><p class="font-semibold">v0.1</p>
+   <ul class="mt-2 list-disc space-y-1 pl-5 text-sm muted"><li>三协议网关、自动路由、失败切换与熔断</li></ul></li>
+ </ol>
+ <p class="mt-8 text-sm muted">下一步 <span class="soon">规划中</span>：同一上游多密钥负载均衡、TPM 限流、响应缓存、护栏、团队成员与权限、在线支付。</p>
 </section>
 
 <section id="cta" class="wrap pb-20">
@@ -145,7 +285,7 @@ client.chat.completions.create(
 <footer class="border-t border-slate-200 py-10 text-sm dark:border-slate-800">
  <div class="wrap flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
   <div><div class="flex items-center gap-2 font-semibold"><img src="/logo.svg" class="h-6 w-6" alt="">AutoLLM Gate</div><p class="mt-2 max-w-md muted">© <span id="year"></span> Chenfyuan. All rights reserved. 源码可查看，但不是开源软件；未经书面许可，不得使用、复制、修改或分发。</p></div>
-  <nav class="flex gap-6 muted"><a href="#features">功能</a><a href="#metrics">实测</a><a href="#pricing">价格</a><a href="#cta">联系</a></nav>
+  <nav class="flex flex-wrap gap-x-6 gap-y-2 muted"><a href="#features">功能</a><a href="#providers">支持的模型</a><a href="#quickstart">快速开始</a><a href="#faq">常见问题</a><a href="#changelog">更新日志</a><a href="https://github.com/Chenfyuan/autollm-gate">GitHub</a></nav>
  </div>
 </footer>
 <script type="module" src="/main.js"></script>

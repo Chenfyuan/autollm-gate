@@ -85,3 +85,19 @@ cd web && npm ci && npm run typecheck && npm run build
 - 真实支付渠道（微信/支付宝/Stripe）仍为占位，需对接商户号
 - Postgres / Redis / nginx 仍为单点，生产需换托管或主从方案
 - 监控页 P50/P95 为直方图分桶上界，属近似值
+
+## 私有核心插件（可选）
+
+路由评分与计价规则通过插件接口加载（`autollm_gate/plugins.py`）。不安装插件时使用公开仓库自带的默认实现，功能完整可运行。
+
+- 安装方式：私有包注册 entry point `autollm_gate.core`，安装后自动加载；或设置 `AUTOLLM_CORE_PLUGIN=模块:对象` 指定；设为 `off` 强制使用默认实现。
+- 加载失败会记录错误并回退默认实现，`/healthz` 返回的 `core` 字段显示当前生效的实现。
+- Docker 构建时可选安装（凭据只经 BuildKit secret 传入，不写入镜像层、不出现在构建日志）：
+
+```bash
+CORE_TOKEN=<只读访问令牌> docker build \
+  --build-arg CORE_REPO=<owner>/<private-repo> \
+  --secret id=core_token,env=CORE_TOKEN -t autollm-gate .
+```
+
+CI 中把令牌存为仓库 Secret，切勿写入代码、`.env` 示例或工作流明文。

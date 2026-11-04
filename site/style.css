@@ -7,3 +7,23 @@ html{scroll-behavior:smooth}
 .eyebrow{@apply text-sm font-medium text-sky-600 dark:text-sky-400}
 .tab{@apply rounded-lg border border-slate-200 px-3 py-1.5 muted dark:border-slate-800}
 .tab[aria-selected=true]{@apply border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900}
+.navl{@apply hover:text-slate-900 dark:hover:text-white transition-colors}
+.new{@apply mb-2 inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300}
+.soon{@apply rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300}
+.ctab{@apply -mb-px rounded-t-md border-b-2 border-transparent px-3 py-2 text-sm muted}
+.ctab[aria-selected=true]{@apply border-sky-500 font-medium text-slate-900 dark:text-white}
+.code{@apply overflow-x-auto bg-slate-950 p-5 text-[13px] leading-6 text-slate-200}
+.faq{@apply py-4}
+.faq summary{@apply cursor-pointer list-none font-medium flex justify-between items-center}
+.faq summary::after{content:"+";@apply ml-4 text-slate-400 transition-transform}
+.faq[open] summary::after{transform:rotate(45deg)}
+.faq p{@apply mt-3 text-sm muted leading-7}
+.dot{@apply absolute -left-[31px] top-1.5 h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-slate-50 dark:ring-slate-950}
+.card{transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease}
+.card.reveal:hover{transform:translateY(-2px);box-shadow:0 10px 30px -12px rgb(15 23 42 / .15)}
+.hero::before{content:"";position:absolute;inset:-20% -10% auto;height:520px;background:radial-gradient(600px 260px at 50% 0%,rgb(14 165 233 / .14),transparent 70%);pointer-events:none}
+.reveal{opacity:0;transform:translateY(12px)}
+.reveal.in{opacity:1;transform:none;transition:opacity .5s ease,transform .5s ease}
+@media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none}.card{transition:none}html{scroll-behavior:auto}}
+.card p{overflow-wrap:anywhere}
+.ctab{white-space:nowrap}
