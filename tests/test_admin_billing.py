@@ -11,6 +11,7 @@ ADMIN = {"X-Admin-Token": "adm"}
 def app(monkeypatch, client_factory, master_key):
     monkeypatch.setenv("ADMIN_TOKEN", "adm")
     monkeypatch.setenv("ENABLE_MOCK_PAYMENT", "1")
+    monkeypatch.setenv("ENV", "test")
     monkeypatch.setenv("PLATFORM_MARKUP_PCT", "20")
     monkeypatch.setenv("BYOK_FEE_PER_REQUEST_USD", "0")
     monkeypatch.setenv("BYOK_FEE_PER_1K_TOKENS_USD", "0")

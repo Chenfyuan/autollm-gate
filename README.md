@@ -75,7 +75,8 @@ curl localhost:8080/v1/chat/completions -H "Authorization: Bearer sk-lr-..." -H 
 | `BYOK_FEE_PER_REQUEST_USD` / `BYOK_FEE_PER_1K_TOKENS_USD` | BYOK 服务费，默认 0 |
 | `SELFHOSTED_BASE_URL` | 自部署模型端点；在后台以 provider=`selfhosted` 填其 token 即启用，按 scoring.yaml 中的售价计费 |
 | `ROUTER_SCORING_FILE` | 自定义评分 YAML 路径 |
-| `ENABLE_MOCK_PAYMENT` | 1 = 启用模拟支付渠道（仅开发） |
+| `ENV` | `production`（镜像默认）时启用安全检查 |
+| `ENABLE_MOCK_PAYMENT` | 1 = 启用模拟支付渠道（仅开发；`ENV=production` 时设为 1 会拒绝启动） |
 
 计费规则：平台 Key = 上游公开价 ×(1+加价%)；自部署 = YAML 售价；BYOK = 服务费。余额 ≤ 0 时只能使用租户自带 Key。
 
@@ -83,10 +84,19 @@ curl localhost:8080/v1/chat/completions -H "Authorization: Bearer sk-lr-..." -H 
 
 将平台自有的上游 API Key 以按量计费的方式提供给第三方使用（转售），可能违反部分模型厂商的服务条款。商业化运营前请确认已取得相应授权（如企业协议、云厂商 Azure OpenAI / AWS Bedrock / Google Vertex 的转售许可），或优先采用「租户自带 Key」与「自部署开源权重模型（注意模型许可证）」模式。本项目不对使用方式作合规担保。
 
+## 依赖锁定
+
+`requirements.lock`（运行时）与 `requirements-dev.lock`（含测试）由 uv 针对 Python 3.11 生成并带哈希，Docker 构建按锁文件安装。升级依赖：
+
+```bash
+uv pip compile pyproject.toml --python-version 3.11 --generate-hashes -o requirements.lock
+uv pip compile pyproject.toml --extra dev --python-version 3.11 --generate-hashes -o requirements-dev.lock
+```
+
 ## 测试
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -e '.[dev]'
+python -m venv .venv && .venv/bin/pip install --require-hashes -r requirements-dev.lock && .venv/bin/pip install --no-deps -e .
 .venv/bin/pytest -q
 ```
 

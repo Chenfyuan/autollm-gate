@@ -10,7 +10,14 @@ from .db import make_sessionmaker
 from .payments import build_channels
 
 
+def check_startup_config() -> None:
+    """生产环境安全检查：禁止启用模拟支付（否则任何人可伪造回调充值）。"""
+    if os.getenv("ENV", "").lower() == "production" and os.getenv("ENABLE_MOCK_PAYMENT") == "1":
+        raise RuntimeError("ENV=production 时禁止 ENABLE_MOCK_PAYMENT=1，拒绝启动")
+
+
 def build(database_url: str | None = None, master_key: str | None = None, **gw_kw):
+    check_startup_config()
     Session = make_sessionmaker(database_url)
     cfg = gw_kw.pop("config", None) or load_config()
     hooks = BillingHooks(Session, KeyVault(master_key), Pricing(cfg).load(Session))
