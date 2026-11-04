@@ -1,0 +1,9 @@
+export type Daily = { date: string; requests: number; tokens: number; charge_usd: number; cost_usd: number };
+export type ModelRow = { model: string; requests: number; prompt_tokens: number; completion_tokens: number; charge_usd: number; cost_usd: number; avg_latency_ms: number };
+export type Totals = { requests: number; tokens: number; charge_usd: number; cost_usd: number };
+export type TenantBrief = { id: string; name: string; balance_usd: number; reserved_usd: number; monthly_token_limit: number | null; active: boolean; created_at: string };
+export type Me = { user: { id: string; email: string; name: string }; tenant: TenantBrief; mock_payment: boolean };
+export type ApiKey = { id: string; name: string; prefix: string; active: boolean; rpm_limit: number | null; created_at: string; last_used_at: string | null; revoked_at: string | null; api_key?: string };
+export type Topup = { id: string; amount_usd: number; channel: string; status: string; note: string; created_at: string; paid_at: string | null; tenant_name?: string; checkout?: { pay_url?: string } };
+export type BillItem = { id: number; created_at: string; model: string; provider: string; key_source: string; key_name: string; prompt_tokens: number; completion_tokens: number; charge_usd: number; latency_ms: number; status: string };
+export type PublicModel = { model: string; provider: string; context: number; price_in: number; price_out: number; quality: number; speed: number };

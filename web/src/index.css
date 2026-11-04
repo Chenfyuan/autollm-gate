@@ -1,0 +1,66 @@
+@import "@fontsource-variable/inter";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+    --primary: 240 6% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 152 60% 38%;
+    --warning: 35 92% 45%;
+    --border: 240 6% 91%;
+    --input: 240 6% 88%;
+    --ring: 217 91% 60%;
+    --sidebar: 240 5% 98%;
+    --radius: 0.6rem;
+    --chart-1: 217 91% 55%;
+    --chart-2: 162 63% 41%;
+    --chart-3: 35 92% 52%;
+    --chart-4: 280 55% 58%;
+    --chart-5: 350 75% 58%;
+    --chart-6: 199 80% 48%;
+  }
+  .dark {
+    --background: 240 8% 6%;
+    --foreground: 0 0% 96%;
+    --card: 240 7% 8.5%;
+    --card-foreground: 0 0% 96%;
+    --popover: 240 7% 9%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 240 6% 10%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 5% 15%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 63% 52%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 152 55% 48%;
+    --warning: 38 92% 55%;
+    --border: 240 5% 17%;
+    --input: 240 5% 20%;
+    --ring: 217 91% 60%;
+    --sidebar: 240 8% 7.5%;
+  }
+  * { @apply border-border; }
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-background text-foreground text-sm; font-feature-settings: "cv11", "ss01"; }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
