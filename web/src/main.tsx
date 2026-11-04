@@ -21,6 +21,9 @@ import { AdminUpstreams } from "./pages/admin/upstreams";
 import { AdminMonitoring } from "./pages/admin/monitoring";
 import { AdminSettings } from "./pages/admin/settings";
 import { AdminAdmins } from "./pages/admin/admins";
+import { AdminLogs } from "./pages/admin/logs";
+import { AdminAudit } from "./pages/admin/audit";
+import { ConsoleLogs } from "./pages/console/logs";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -34,6 +37,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route index element={<ConsoleOverview />} />
           <Route path="usage" element={<ConsoleUsage />} />
           <Route path="billing" element={<ConsoleBilling />} />
+          <Route path="logs" element={<ConsoleLogs />} />
           <Route path="keys" element={<ConsoleKeys />} />
           <Route path="topup" element={<ConsoleTopup />} />
           <Route path="models" element={<ConsoleModels />} />
@@ -48,6 +52,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="monitoring" element={<AdminMonitoring />} />
           <Route path="settings" element={<AdminSettings />} />
           <Route path="admins" element={<AdminAdmins />} />
+          <Route path="logs" element={<AdminLogs />} />
+          <Route path="audit" element={<AdminAudit />} />
         </Route>
         <Route path="*" element={<Navigate to="/console" replace />} />
       </Routes>

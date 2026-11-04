@@ -12,8 +12,9 @@ import { useApi } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import type { ApiKey } from "@/lib/types";
 import { dt, relTime } from "@/lib/utils";
+import { PolicyBadges, PolicyFields, emptyPolicy, policyBody, policyFromKey, type PolicyForm } from "@/components/key-policy";
 
-export function KeysTable({ keys, onRevoke }: { keys: ApiKey[]; onRevoke: (k: ApiKey) => void }) {
+export function KeysTable({ keys, onRevoke, onEdit }: { keys: ApiKey[]; onRevoke: (k: ApiKey) => void; onEdit?: (k: ApiKey) => void }) {
   return (
     <Table>
       <THead>
@@ -21,6 +22,7 @@ export function KeysTable({ keys, onRevoke }: { keys: ApiKey[]; onRevoke: (k: Ap
           <TH className="pl-5">名称</TH>
           <TH>密钥</TH>
           <TH>状态</TH>
+          <TH>访问策略</TH>
           <TH>创建时间</TH>
           <TH>最近使用</TH>
           <TH className="pr-5" />
@@ -40,9 +42,15 @@ export function KeysTable({ keys, onRevoke }: { keys: ApiKey[]; onRevoke: (k: Ap
                 <Badge variant="outline">已吊销</Badge>
               )}
             </TD>
+            <TD><PolicyBadges k={k} /></TD>
             <TD className="tabular text-muted-foreground">{dt(k.created_at)}</TD>
             <TD className="text-muted-foreground">{relTime(k.last_used_at)}</TD>
-            <TD className="pr-5 text-right">
+            <TD className="whitespace-nowrap pr-5 text-right">
+              {k.active && onEdit && (
+                <Button variant="ghost" size="sm" onClick={() => onEdit(k)}>
+                  策略
+                </Button>
+              )}
               {k.active && (
                 <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => onRevoke(k)}>
                   吊销
@@ -63,14 +71,31 @@ export function ConsoleKeys() {
   const [created, setCreated] = React.useState<ApiKey | null>(null);
   const [revoking, setRevoking] = React.useState<ApiKey | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
+  const [policy, setPolicy] = React.useState<PolicyForm>(emptyPolicy);
+  const [editing, setEditing] = React.useState<ApiKey | null>(null);
+  const [editPolicy, setEditPolicy] = React.useState<PolicyForm>(emptyPolicy);
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setErr(null);
+    try {
+      await api.patch(`/api/console/keys/${editing.id}`, policyBody(editPolicy, true));
+      toast.success(`已更新「${editing.name}」的访问策略`);
+      setEditing(null);
+      reload();
+    } catch (x) {
+      setErr((x as Error).message);
+    }
+  };
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
     try {
-      const k = await api.post<ApiKey>("/api/console/keys", { name });
+      const k = await api.post<ApiKey>("/api/console/keys", { name, ...policyBody(policy) });
       setCreated(k);
       setName("");
+      setPolicy(emptyPolicy);
       reload();
     } catch (x) {
       setErr((x as Error).message);
@@ -105,7 +130,7 @@ export function ConsoleKeys() {
         ) : data.length === 0 ? (
           <Empty icon={<KeyRound />} title="还没有密钥" desc="创建第一个密钥，即可开始调用。" />
         ) : (
-          <KeysTable keys={[...active, ...revoked]} onRevoke={setRevoking} />
+          <KeysTable keys={[...active, ...revoked]} onRevoke={setRevoking} onEdit={(k) => { setErr(null); setEditPolicy(policyFromKey(k)); setEditing(k); }} />
         )}
       </Card>
 
@@ -120,6 +145,7 @@ export function ConsoleKeys() {
               <Field label="名称">
                 <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：生产环境、Claude Code" maxLength={100} />
               </Field>
+              <PolicyFields value={policy} onChange={setPolicy} />
               <ErrorNote msg={err} />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -146,6 +172,25 @@ export function ConsoleKeys() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent>
+          <form onSubmit={saveEdit} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>访问策略 ·「{editing?.name}」</DialogTitle>
+              <DialogDescription>修改后立即生效，无需更换密钥。</DialogDescription>
+            </DialogHeader>
+            <PolicyFields value={editPolicy} onChange={setEditPolicy} editing />
+            <ErrorNote msg={err} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
+                取消
+              </Button>
+              <Button>保存</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

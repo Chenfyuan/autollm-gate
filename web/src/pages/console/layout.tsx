@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Outlet } from "react-router-dom";
-import { BookOpen, CreditCard, KeyRound, LayoutDashboard, LineChart, ReceiptText, Boxes } from "lucide-react";
+import { BookOpen, ScrollText, CreditCard, KeyRound, LayoutDashboard, LineChart, ReceiptText, Boxes } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { useApi } from "@/lib/hooks";
 import type { Me } from "@/lib/types";
@@ -12,6 +12,7 @@ const items = [
   { to: "/console", label: "概览", icon: <LayoutDashboard />, end: true },
   { to: "/console/usage", label: "用量分析", icon: <LineChart /> },
   { to: "/console/billing", label: "账单明细", icon: <ReceiptText /> },
+  { to: "/console/logs", label: "请求日志", icon: <ScrollText /> },
   { to: "/console/keys", label: "API 密钥", icon: <KeyRound /> },
   { to: "/console/topup", label: "余额充值", icon: <CreditCard /> },
   { to: "/console/models", label: "模型与价格", icon: <Boxes /> },

@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { Activity, Boxes, KeyRound, LayoutDashboard, Settings, ShieldCheck, Users } from "lucide-react";
+import { Activity, Boxes, History, KeyRound, LayoutDashboard, ScrollText, Settings, ShieldCheck, Users } from "lucide-react";
 import { AppShell } from "@/components/shell";
 import { useApi } from "@/lib/hooks";
 
@@ -8,9 +8,11 @@ const items = [
   { to: "/admin/tenants", label: "租户管理", icon: <Users /> },
   { to: "/admin/models", label: "模型与价格", icon: <Boxes /> },
   { to: "/admin/upstreams", label: "上游密钥", icon: <KeyRound /> },
+  { to: "/admin/logs", label: "请求日志", icon: <ScrollText /> },
   { to: "/admin/monitoring", label: "监控告警", icon: <Activity /> },
   { to: "/admin/settings", label: "计费与告警设置", icon: <Settings /> },
   { to: "/admin/admins", label: "管理员", icon: <ShieldCheck /> },
+  { to: "/admin/audit", label: "审计日志", icon: <History /> },
 ];
 
 export function AdminLayout() {
