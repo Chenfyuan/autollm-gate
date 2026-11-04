@@ -1,0 +1,32 @@
+# v0.2 验收记录
+
+环境：单机 Docker，HA 形态（gate-1、gate-2 + nginx + Postgres 16 + Redis 7），上游为本地假上游（约 40ms 延迟）。时间为 2026-11-04（新加坡时间 UTC+8）。
+
+| # | 验收项 | 验证方式 | 结果 |
+|---|---|---|---|
+| 1 | 自动化测试 | `pytest`（含 `TEST_DATABASE_URL` 指向 Postgres） | 74 项全部通过 |
+| 2 | 前端构建 | `npm run typecheck && npm run build` | 通过 |
+| 3 | v0.1 数据库原地升级 | 对 v0.1 库执行迁移 | 自动标记 0001 并升级至 0002，原有租户数据保留 |
+| 4 | 管理员密码哈希、无明文令牌 | 查看 `admin_users` 表；后台登录 | argon2id 哈希；登录态为 HttpOnly 签名 Cookie，原 `ADMIN_TOKEN` 已移除 |
+| 5 | 上游密钥加密、只显示掩码 | 查看 `upstream_keys` 表与后台页面 | 库中为密文，接口与页面只返回掩码 |
+| 6 | 原子预扣、不透支、不重复扣费 | `tests/test_v02_billing.py::test_concurrent_reserve_never_overdraws`（sqlite 与 Postgres） | 并发下余额从不为负，冻结额全部释放，扣费次数与成功请求一致 |
+| 7 | 注册/登录/API 限流 | `tests/test_v02_core.py`、`test_admin_billing.py` 中的限流用例 | 超限返回 429 |
+| 8 | 生产拒绝模拟支付 | `ENV=production ENABLE_MOCK_PAYMENT=1` 启动 | 拒绝启动（`test_startup.py`） |
+| 9 | 两实例压测 | `scripts/loadtest.py load`，经 nginx | 并发 20、20 秒：6,879 次，343.6 RPS，p50 56ms / p95 79ms / p99 113ms，错误率 0%<br>并发 50、60 秒：23,496 次，390.7 RPS，p50 109ms / p95 236ms / p99 399ms，错误率 0%<br>两实例分流 15,180 / 15,205；结束后所有租户冻结额为 0，无负余额 |
+| 10 | 故障切换与熔断恢复 | `scripts/loadtest.py probe` 20 RPS，期间停掉 OpenAI 假上游 30 秒后恢复 | 1,379 次请求 0 失败；停机后 0.15 秒出现首次切换，0.71 秒熔断生效直接跳过；恢复后 0.43 秒流量回到 OpenAI；最大延迟 180ms |
+| 11 | 429 / 5xx / 超时切换 | `tests/test_v02_core.py` 用例 | 均切换到下一候选，4xx 不切换、不计熔断 |
+| 12 | 余额不足告警 | 阈值设为 $5，Webhook 指向 `scripts/alert_receiver.py` | 14:16:05 收到「拾光文创」余额不足告警 |
+| 13 | 上游错误率告警 | 14:16:44 停掉 DeepSeek 假上游并持续请求 | 14:16:50 收到「上游 deepseek 错误率 92%（12 次中 11 次失败）」；同期 60 次客户端请求全部成功（已切换） |
+| 14 | 健康/就绪/指标 | `curl /healthz /readyz /metrics` | 正常返回；`/readyz` 同时检查数据库与 Redis |
+| 15 | 监控页面 | 后台「监控告警」 | 显示各上游调用量、失败数、错误率、延迟、熔断状态与告警记录，见截图 |
+| 16 | 设置多实例同步 | 后台修改加价，另一实例立即生效 | 通过 Redis 广播同步 |
+
+## 截图
+
+见 `scripts/screenshots.py` 生成的页面截图（1440×900，浅色）：租户概览、用量分析、账单、密钥、充值、快速开始、后台概览、租户管理、租户详情、计费与告警设置、监控告警、上游密钥、模型与价格。
+
+## 未覆盖 / 已知差距
+
+- 超时切换仅有单元测试，未在整栈上演练
+- 未接入真实模型做端到端验证（仅假上游）
+- 熔断状态按进程独立；Postgres / Redis / nginx 仍为单点；无 TLS
