@@ -15,6 +15,9 @@ class PaymentChannel:
 
 
 class MockChannel(PaymentChannel):
+    label = "模拟支付（仅测试环境）"
+    available = True
+
     """仅用于开发/测试：回调 payload {"topup_id":..., "paid": true} 即视为支付成功。生产环境务必关闭。"""
     name = "mock"
 
@@ -26,8 +29,12 @@ class MockChannel(PaymentChannel):
 
 
 class NotConfiguredChannel(PaymentChannel):
+    LABELS = {"stripe": "Stripe 信用卡", "alipay": "支付宝", "wechat": "微信支付"}
+    available = False
+
     def __init__(self, name):
         self.name = name
+        self.label = self.LABELS.get(name, name)
 
     def create_checkout(self, topup_id, amount_micro):
         raise NotImplementedError(f"支付渠道 {self.name} 尚未接入")
