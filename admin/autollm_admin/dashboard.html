@@ -1,0 +1,35 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoLLM Gate 管理后台</title>
+<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#222}
+table{border-collapse:collapse;width:100%;margin:8px 0 24px}td,th{border:1px solid #ddd;padding:6px;font-size:13px;text-align:left}
+th{background:#f5f5f5}input,select,button{padding:6px;margin:2px}section{margin-bottom:28px}code{background:#f3f3f3;padding:2px 4px}</style></head>
+<body><h1>AutoLLM Gate 管理后台</h1>
+<p>Admin Token：<input id="tok" type="password" size="40"><button onclick="save()">保存并刷新</button></p>
+<section><h2>租户</h2><input id="tname" placeholder="租户名"><input id="tmk" placeholder="加价%（空=全局）" size="12"><input id="tlim" placeholder="月 token 上限" size="12">
+<button onclick="createTenant()">新建租户</button><table id="tenants"></table></section>
+<section><h2>平台上游 Key</h2><select id="pprov"></select><input id="pkey" type="password" placeholder="sk-..." size="40"><button onclick="setPlatform()">保存</button><table id="platform"></table></section>
+<section><h2>用量统计</h2><table id="usage"></table></section>
+<section><h2>充值记录</h2><table id="topups"></table></section>
+<p id="out"></p>
+<script>
+const P=["openai","anthropic","gemini","deepseek","selfhosted"];pprov.innerHTML=P.map(p=>`<option>${p}</option>`).join("");
+tok.value=localStorage.lrTok||"";
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(m,u,b){const r=await fetch(u,{method:m,headers:{"X-Admin-Token":tok.value,"Content-Type":"application/json"},body:b?JSON.stringify(b):undefined});
+const j=await r.json();if(!r.ok){out.textContent="错误："+JSON.stringify(j);throw j}return j}
+function table(el,rows,cols,extra){el.innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+(extra?"<th>操作</th>":"")+"</tr>"+
+rows.map(r=>"<tr>"+cols.map(c=>`<td>${esc(r[c])}</td>`).join("")+(extra?`<td>${extra(r)}</td>`:"")+"</tr>").join("")}
+function save(){localStorage.lrTok=tok.value;load()}
+async function load(){
+table(tenants,await api("GET","/admin/api/tenants"),["id","name","balance_usd","markup_pct","monthly_token_limit","active"],
+ r=>`<button onclick="newKey('${r.id}')">发 Key</button><button onclick="topup('${r.id}')">充值</button><button onclick="byok('${r.id}')">自带 Key</button>`);
+table(platform,await api("GET","/admin/api/platform/upstream"),["provider","hint","id"]);
+table(usage,await api("GET","/admin/api/usage"),["tenant_id","model","key_source","requests","prompt_tokens","completion_tokens","cost_usd","charge_usd"]);
+table(topups,await api("GET","/admin/api/topups"),["tenant_id","amount_usd","channel","status","created_at"]);}
+async function createTenant(){await api("POST","/admin/api/tenants",{name:tname.value,markup_pct:tmk.value?+tmk.value:null,monthly_token_limit:tlim.value?+tlim.value:null});load()}
+async function newKey(id){const j=await api("POST",`/admin/api/tenants/${id}/keys`,{name:"dashboard"});out.innerHTML="新 Key（只显示一次）：<code>"+esc(j.api_key)+"</code>"}
+async function topup(id){const a=prompt("充值金额 (USD)");if(a){await api("POST",`/admin/api/tenants/${id}/topups`,{amount_usd:+a,note:"后台手工"});load()}}
+async function byok(id){const p=prompt("provider: "+P.join("/"));const k=p&&prompt("上游 Key");if(k){await api("PUT",`/admin/api/tenants/${id}/upstream`,{provider:p,api_key:k});out.textContent="已保存（加密存储）"}}
+async function setPlatform(){await api("PUT","/admin/api/platform/upstream",{provider:pprov.value,api_key:pkey.value});pkey.value="";load()}
+if(tok.value)load();
+</script></body></html>
