@@ -1,6 +1,7 @@
 """管理后台 API：管理员登录（多账号）、租户、模型价格、平台上游 Key、计费设置、告警、监控、概览。Cookie 会话。"""
 from __future__ import annotations
 import json, os, re
+from .webhook_guard import WebhookURLError, validate_webhook_url
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -396,8 +397,11 @@ def build_admin(Session, hooks, state, alerter, channels: dict) -> APIRouter:
     @r.put("/settings")
     async def put_settings(b: SettingsIn, a: AdminUser = A):
         url = b.alert_webhook_url
-        if url and not re.match(r"^https?://", url.strip()):
-            raise HTTPException(422, "Webhook 地址必须以 http:// 或 https:// 开头")
+        if url and url.strip():
+            try:
+                await validate_webhook_url(url)
+            except WebhookURLError as e:
+                raise HTTPException(422, str(e))
         async with Session() as s:
             for k, v in b.model_dump(exclude_none=True).items():
                 v = ("1" if v else "0") if isinstance(v, bool) else str(v).strip()

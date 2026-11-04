@@ -24,6 +24,8 @@
 - 密码 argon2id 哈希；登录态为 HttpOnly + SameSite 的签名 JWT Cookie，配合 CSRF 头校验；改密/禁用即吊销会话
 - 上游密钥用 `MASTER_KEY` 加密落库
 - 注册、登录、API 调用均有限流（按 IP / 按密钥 RPM）
+- 告警 Webhook 防 SSRF：生产环境只允许 https；保存时和每次发送前都会解析域名，拒绝内网、本机、链路本地、保留和组播地址（IPv4/IPv6）
+- 只有 ha 模式（网关仅经 nginx 访问、nginx 用真实来源地址覆盖 `X-Forwarded-For` / `X-Real-IP`）才开启 `TRUST_PROXY`；单实例默认关闭
 - 生产环境（`ENV=production`）拒绝开启模拟支付、拒绝过短的 `SESSION_SECRET`
 
 **告警**：上游错误率突增、租户余额不足、月度额度将满，推送到 Webhook（支持通用 JSON / 飞书 / 企业微信 / 钉钉 / Slack），同一告警在冷却期内只发一次；多实例时通过 Redis 选主，只有一个实例负责评估。另附 Prometheus 告警规则 `deploy/prometheus/alerts.yml`。
@@ -45,7 +47,7 @@ docker compose up -d --build
 
 - 容器启动时自动执行数据库迁移（Alembic，Postgres 上有 advisory lock，多实例同时启动也安全）；v0.1 的数据库会被识别并原地升级。
 - 首个管理员由 `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` 创建（仅当还没有管理员时），之后可在后台添加更多管理员。
-- 生产请在 nginx 前加 TLS，并设置 `COOKIE_SECURE=1`；若前面还有代理，设置 `TRUST_PROXY=1` 以识别真实 IP。
+- 生产请在 nginx 前加 TLS，并设置 `COOKIE_SECURE=1`。单实例默认不信任代理头；ha 模式已自动开启。若在 nginx 前再加一层代理，需让外层也覆盖这两个头。
 - `/metrics` 在 nginx 上默认对外屏蔽，Prometheus 直接抓取各实例。
 
 手动迁移：`python -m autollm_admin.migrate`。

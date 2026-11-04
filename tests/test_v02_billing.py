@@ -209,7 +209,7 @@ def test_alert_webhook_low_balance_and_error_spike(app, upstream):
     alerter = app.app.state.alerter
     alerter.client = hook_client
     admin_login(app)
-    app.put("/api/admin/settings", json={"alert_webhook_url": "http://hook.local/x", "alert_webhook_format": "feishu",
+    app.put("/api/admin/settings", json={"alert_webhook_url": "http://93.184.216.34/x", "alert_webhook_format": "feishu",
                                         "alert_low_balance_usd": 5, "alert_min_requests": 3, "alert_error_rate_pct": 50}, headers=H)
     tid, h = tenant(app)
     app.put("/api/admin/upstreams", json={"provider": "openai", "api_key": "sk-platform-1234"}, headers=H)

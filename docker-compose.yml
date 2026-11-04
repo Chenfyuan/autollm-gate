@@ -7,7 +7,7 @@ x-gate: &gate
   environment:
     DATABASE_URL: postgresql+asyncpg://autollm:${POSTGRES_PASSWORD}@db:5432/autollm
     REDIS_URL: redis://redis:6379/0
-    TRUST_PROXY: "1"
+    TRUST_PROXY: "0"
   depends_on:
     db: {condition: service_healthy}
     redis: {condition: service_healthy}
@@ -20,13 +20,22 @@ services:
     ports: ["${GATE_PORT:-8080}:8080"]
     profiles: ["single"]
 
+  # ha 模式下网关只经 nginx 访问，nginx 会覆盖 X-Forwarded-For，才可信任代理头
   gate-1:
     <<: *gate
     build: .
     profiles: ["ha"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autollm:${POSTGRES_PASSWORD}@db:5432/autollm
+      REDIS_URL: redis://redis:6379/0
+      TRUST_PROXY: "1"
   gate-2:
     <<: *gate
     profiles: ["ha"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://autollm:${POSTGRES_PASSWORD}@db:5432/autollm
+      REDIS_URL: redis://redis:6379/0
+      TRUST_PROXY: "1"
   lb:
     image: nginx:1.27-alpine
     profiles: ["ha"]

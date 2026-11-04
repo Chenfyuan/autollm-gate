@@ -73,9 +73,13 @@ def read(request: Request, cookie: str, kind: str) -> dict:
 
 def client_ip(request: Request) -> str:
     if os.getenv("TRUST_PROXY", "0") == "1":
+        # nginx 以 $remote_addr 覆盖这两个头；取最右侧一跳，避免客户端伪造
+        real = request.headers.get("x-real-ip")
+        if real:
+            return real.strip()
         xff = request.headers.get("x-forwarded-for")
         if xff:
-            return xff.split(",")[0].strip()
+            return xff.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
