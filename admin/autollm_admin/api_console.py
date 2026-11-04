@@ -2,11 +2,13 @@
 from __future__ import annotations
 import os, re
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from . import reports, security as sec
 from .billing import hash_key, new_api_key, usd
+from .governance import KeyPolicy, apply_policy, audit, log_query, log_row, policy_out, to_csv
 from .db import MICRO, ApiKey, Tenant, TenantUser, Topup, Usage, iso, now
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -45,7 +47,7 @@ def topup_out(t: Topup):
 
 def key_out(k: ApiKey):
     return {"id": k.id, "name": k.name or "未命名", "prefix": k.prefix, "active": k.active, "rpm_limit": k.rpm_limit,
-            "created_at": iso(k.created_at), "last_used_at": iso(k.last_used_at), "revoked_at": iso(k.revoked_at)}
+            "created_at": iso(k.created_at), "last_used_at": iso(k.last_used_at), "revoked_at": iso(k.revoked_at), **policy_out(k)}
 
 
 async def mark_paid(s, tp: Topup, external_id: str | None):
@@ -163,16 +165,45 @@ def build_console(Session, hooks, state, channels: dict) -> APIRouter:
         return [key_out(k) for k in rows]
 
     @r.post("/console/keys")
-    async def create_key(b: KeyIn, u: TenantUser = U):
+    async def create_key(b: KeyPolicy, request: Request, u: TenantUser = U):
         async with Session() as s:
             n = await s.scalar(select(func.count()).select_from(ApiKey).where(ApiKey.tenant_id == u.tenant_id, ApiKey.active.is_(True)))
             if n >= int(os.getenv("MAX_KEYS_PER_TENANT", "20")):
                 raise HTTPException(400, "有效 Key 数量已达上限，请先吊销不用的 Key")
             raw = new_api_key()
-            k = ApiKey(tenant_id=u.tenant_id, name=b.name.strip() or "未命名", prefix=raw[:10], key_hash=hash_key(raw))
+            k = ApiKey(tenant_id=u.tenant_id, name=b.name.strip() or "未命名", prefix=raw[:10], key_hash=hash_key(raw),
+                       allowed_models="", ip_allowlist="", spent_micro=0)
+            apply_policy(k, b, creating=True)
             s.add(k)
+            await audit(s, request, "tenant", u.email, "key.create", k.prefix, u.tenant_id, {"name": k.name})
             await s.commit()
         return {**key_out(k), "api_key": raw}
+
+    @r.patch("/console/keys/{kid}")
+    async def patch_key(kid: str, b: KeyPolicy, request: Request, u: TenantUser = U):
+        async with Session() as s:
+            k = await s.get(ApiKey, kid)
+            if not k or k.tenant_id != u.tenant_id:
+                raise HTTPException(404, "Key 不存在")
+            apply_policy(k, b)
+            await audit(s, request, "tenant", u.email, "key.update", k.prefix, u.tenant_id, b.model_dump(exclude_none=True, mode="json"))
+            await s.commit()
+            return key_out(k)
+
+    @r.get("/console/logs")
+    async def logs(model: str | None = None, status: str | None = None, key_id: str | None = None, start: str | None = None,
+                   end: str | None = None, page: int = 1, size: int = 50, format: str = "json", u: TenantUser = U):
+        size = max(1, min(size, 200))
+        async with Session() as s:
+            names = {k.id: k.name for k in await s.scalars(select(ApiKey).where(ApiKey.tenant_id == u.tenant_id))}
+            q = log_query(tenant_id=u.tenant_id, model=model, status=status, api_key_id=key_id, start=start, end=end)
+            if format == "csv":
+                rows = (await s.scalars(q.order_by(Usage.id.desc()).limit(50000))).all()
+                return PlainTextResponse(to_csv([log_row(x, names) for x in rows]), media_type="text/csv; charset=utf-8",
+                                         headers={"Content-Disposition": "attachment; filename=request-logs.csv"})
+            total = await s.scalar(select(func.count()).select_from(q.subquery()))
+            rows = (await s.scalars(q.order_by(Usage.id.desc()).offset((max(page, 1) - 1) * size).limit(size))).all()
+        return {"total": total, "page": page, "size": size, "items": [log_row(x, names) for x in rows]}
 
     @r.delete("/console/keys/{kid}")
     async def revoke_key(kid: str, u: TenantUser = U):

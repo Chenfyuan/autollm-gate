@@ -37,7 +37,8 @@ def build(database_url: str | None = None, master_key: str | None = None, state=
     Session = make_sessionmaker(engine)
     state = state or make_state()
     cfg = gw_kw.pop("config", None) or load_config()
-    pricing = Pricing(cfg)
+    from autollm_gate.plugins import load_core
+    pricing = (getattr(load_core(), "pricing_class", None) or Pricing)(cfg)
     hooks = BillingHooks(Session, KeyVault(master_key), pricing, state)
     channels = build_channels(os.getenv("ENABLE_MOCK_PAYMENT") == "1")
     alerter = Alerter(Session, state, pricing)
@@ -65,8 +66,38 @@ def build(database_url: str | None = None, master_key: str | None = None, state=
     app.include_router(build_console(Session, hooks, state, channels))
     app.include_router(build_webhooks(Session, channels))
     app.state.Session, app.state.engine, app.state.hooks, app.state.alerter = Session, engine, hooks, alerter
+    install_audit(app, Session)
     mount_frontend(app)
     return app
+
+
+_AUDIT_SKIP = ("/api/admin/auth/", "/api/admin/keys/", "/api/admin/billing/webhook")
+
+
+def install_audit(app, Session):
+    """管理后台所有成功的写操作自动记审计（Key 相关接口自行记录更详细的内容）。"""
+    from . import security as sec
+    from .db import AdminUser
+    from .governance import audit
+
+    @app.middleware("http")
+    async def _audit(request: Request, call_next):
+        resp = await call_next(request)
+        path = request.url.path
+        if (request.method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith("/api/admin/") and resp.status_code < 400
+                and not path.startswith(_AUDIT_SKIP) and not (path.startswith("/api/admin/tenants/") and path.endswith("/keys"))):
+            try:
+                c = sec.read(request, sec.ADMIN_COOKIE, "admin")
+                async with Session() as s:
+                    a = await s.get(AdminUser, c["sub"])
+                    parts = path[len("/api/admin/"):].split("/")
+                    tid = parts[1] if parts[0] == "tenants" and len(parts) > 1 else None
+                    await audit(s, request, "admin", a.email if a else c["sub"], f"{request.method.lower()} {parts[0]}",
+                                "/".join(parts[1:]), tid)
+                    await s.commit()
+            except Exception:
+                log.exception("audit failed")
+        return resp
 
 
 def mount_frontend(app):

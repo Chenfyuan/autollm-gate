@@ -7,7 +7,7 @@
 3. release：所有上游都失败时全额退回冻结。
 """
 from __future__ import annotations
-import hashlib, json, logging, os, secrets, time
+import hashlib, ipaddress, json, logging, os, secrets, time
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request
 from sqlalchemy import case, func, select, text, update
@@ -22,6 +22,44 @@ log = logging.getLogger("autollm_admin.billing")
 
 def hash_key(k: str) -> str:
     return hashlib.sha256(k.encode()).hexdigest()
+
+
+def client_ip(request: Request) -> str:
+    """客户端 IP。TRUST_PROXY_HEADERS=1（部署在 nginx 之后）时取 X-Forwarded-For 最左侧地址。"""
+    if os.getenv("TRUST_PROXY_HEADERS") == "1":
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        if request.headers.get("x-real-ip"):
+            return request.headers["x-real-ip"].strip()
+    return request.client.host if request.client else ""
+
+
+def split_csv(v: str | None) -> list[str]:
+    return [x.strip() for x in (v or "").split(",") if x.strip()]
+
+
+def ip_allowed(ip: str, allow: list[str]) -> bool:
+    if not allow:
+        return True
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for net in allow:
+        try:
+            if a in ipaddress.ip_network(net, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def model_allowed(model: str, allow: list[str]) -> bool:
+    """白名单支持精确名与前缀通配（如 gpt-4o*）。"""
+    if not allow:
+        return True
+    return any(model == x or (x.endswith("*") and model.startswith(x[:-1])) for x in allow)
 
 
 def new_api_key() -> str:
@@ -130,6 +168,12 @@ class BillingHooks(GatewayHooks):
             ak = await s.scalar(select(ApiKey).where(ApiKey.key_hash == hash_key(raw), ApiKey.active.is_(True)))
             if not ak:
                 raise HTTPException(401, "API Key 无效或已吊销")
+            if ak.expires_at and aware(ak.expires_at) <= now():
+                raise HTTPException(401, "API Key 已过期")
+            if not ip_allowed(client_ip(request), split_csv(ak.ip_allowlist)):
+                raise HTTPException(403, "当前 IP 不在该 Key 的白名单内")
+            if ak.spend_limit_micro is not None and (ak.spent_micro or 0) >= ak.spend_limit_micro:
+                raise HTTPException(402, "该 Key 已达到消费上限")
             t = await s.get(Tenant, ak.tenant_id)
             if not t or not t.active:
                 raise HTTPException(403, "租户已停用")
@@ -152,7 +196,11 @@ class BillingHooks(GatewayHooks):
                 ups = {p: v for p, v in ups.items() if v[1] == "byok"}  # 余额耗尽时只能用自带 Key
                 if not ups:
                     raise HTTPException(402, "余额不足，请充值或配置自带上游 Key")
-            return Context(t.id, ak.id, ups, {"markup": t.markup_pct, "limit": t.monthly_token_limit, "hold": 0})
+            return Context(t.id, ak.id, ups, {"markup": t.markup_pct, "limit": t.monthly_token_limit, "hold": 0,
+                                                     "allowed_models": split_csv(ak.allowed_models)})
+
+    def allow_model(self, ctx: Context, model: str) -> bool:
+        return model_allowed(model, ctx.extra.get("allowed_models") or [])
 
     async def check_quota(self, ctx: Context, est_prompt_tokens: int, model: str) -> None:
         if not ctx.extra.get("limit"):
@@ -209,6 +257,8 @@ class BillingHooks(GatewayHooks):
         hold, ctx.extra["hold"] = ctx.extra.get("hold", 0), 0
         async with self.Session() as s:
             charged = await self.settle(s, ctx.tenant_id, hold, charge)
+            if ctx.api_key_id and charged:
+                await s.execute(update(ApiKey).where(ApiKey.id == ctx.api_key_id).values(spent_micro=ApiKey.spent_micro + charged))
             s.add(Usage(tenant_id=ctx.tenant_id, api_key_id=ctx.api_key_id, model=model, provider=provider,
                         key_source=key_source, strategy=strategy, prompt_tokens=pt, completion_tokens=ct,
                         cost_micro=cost, charge_micro=charged, latency_ms=latency_ms, status=status))

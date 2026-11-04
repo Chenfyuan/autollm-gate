@@ -68,6 +68,10 @@ class OpenAICompatible(Provider):
         r = await self._post(f"{self.base}/chat/completions", {"Authorization": f"Bearer {key}"}, p)
         return r.json()
 
+    async def embeddings(self, model, body, key):
+        r = await self._post(f"{self.base}/embeddings", {"Authorization": f"Bearer {key}"}, {**body, "model": model})
+        return r.json()
+
     async def stream(self, model, body, key):
         p = {**body, "model": model, "stream": True, "stream_options": {"include_usage": True}}
         r = await self._post(f"{self.base}/chat/completions", {"Authorization": f"Bearer {key}"}, p, stream=True)

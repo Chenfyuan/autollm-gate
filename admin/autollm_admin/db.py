@@ -88,6 +88,26 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(TS, default=now)
     last_used_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    # v0.3 Key 级策略：模型白名单、过期时间、IP 白名单、消费上限
+    allowed_models: Mapped[str] = mapped_column(Text, default="")      # 逗号分隔；空 = 不限
+    ip_allowlist: Mapped[str] = mapped_column(Text, default="")        # 逗号分隔 IP/CIDR；空 = 不限
+    expires_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    spend_limit_micro: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    spent_micro: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class AuditLog(Base):
+    """后台/控制台写操作审计。"""
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor_type: Mapped[str] = mapped_column(String(16))     # admin / tenant
+    actor: Mapped[str] = mapped_column(String(254))
+    tenant_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(64))
+    target: Mapped[str] = mapped_column(String(200), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(TS, default=now, index=True)
 
 
 class UpstreamKey(Base):

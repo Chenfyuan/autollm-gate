@@ -31,6 +31,10 @@ class GatewayHooks:
             raise HTTPException(401, "invalid api key")
         return Context("default", upstream={p: (os.environ[e], "byok") for p, e in ENV_KEYS.items() if os.getenv(e)})
 
+    def allow_model(self, ctx: Context, model: str) -> bool:
+        """Key 级模型白名单；默认不限制。"""
+        return True
+
     async def check_quota(self, ctx: Context, est_prompt_tokens: int, model: str) -> None:
         return None
 

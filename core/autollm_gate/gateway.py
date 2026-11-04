@@ -14,7 +14,8 @@ from .breaker import Breakers
 from .hooks import Context, GatewayHooks
 from .logging_setup import fields, setup_logging
 from .providers import PROVIDER_CLASSES, UpstreamError
-from .router import STRATEGIES, estimate_tokens, load_config, select
+from .router import STRATEGIES, estimate_tokens, load_config, select as default_select
+from .plugins import load_core
 from .session import SessionStore, extract_session_id
 from .state import make_state
 
@@ -41,6 +42,8 @@ class Gateway:
         self.state = state or make_state()
         self.sessions = SessionStore(self.state)
         self.breakers = breakers or Breakers()
+        self.core = load_core()
+        self.select = getattr(self.core, "select", None) or default_select
 
     def provider(self, name):
         return PROVIDER_CLASSES[name](self.client, self.base_urls.get(name))
@@ -53,7 +56,7 @@ class Gateway:
         sticky = await self.sessions.get(sid, ctx.tenant_id) if sid else None
         is_auto = str(body.get("model", "auto")).startswith("auto")
         try:
-            dec = select(body, self.cfg, avail)
+            dec = self.select(body, self.cfg, avail)
         except ValueError as e:
             raise HTTPException(400, str(e))
         except LookupError as e:
@@ -75,6 +78,19 @@ class Gateway:
             raise HTTPException(503, f"没有可用上游可服务模型 {body.get('model')}")
         return dec, attempts, reason
 
+    # ---------- 跨副本共享熔断：某副本熔断后写入 Redis，其他副本在冷却期内同样跳过该上游 ----------
+    async def _shared_open(self, p) -> bool:
+        try:
+            return bool(await self.state.get(f"breaker:open:{p}"))
+        except Exception:
+            return False
+
+    async def _share_open(self, p, cooldown):
+        try:
+            await self.state.set(f"breaker:open:{p}", "1", ttl=max(1, int(cooldown)))
+        except Exception:
+            log.warning("share breaker state failed")
+
     def headers(self, dec, provider, model, reason, tried):
         return {"X-Router-Model": model, "X-Router-Provider": provider, "X-Router-Strategy": dec.strategy,
                 "X-Router-Task": dec.task, "X-Router-Reason": quote(reason, safe=" ;=:.,-_/#"),
@@ -91,6 +107,11 @@ class Gateway:
             raise HTTPException(400, "messages 不能为空")
         sid = extract_session_id(request.headers, body)
         dec, attempts, reason = await self.plan(body, ctx, sid)
+        if dec.strategy == "explicit" and not self.hooks.allow_model(ctx, str(body.get("model"))):
+            attempts = []
+        attempts = [(p, m) for p, m in attempts if self.hooks.allow_model(ctx, m)]
+        if not attempts:
+            raise HTTPException(403, f"该 API Key 无权使用模型 {body.get('model')}")
         est = estimate_tokens(body["messages"])
         await self.hooks.check_quota(ctx, est, attempts[0][1])
         max_out = int(body.get("max_tokens") or body.get("max_completion_tokens") or 0)
@@ -102,6 +123,9 @@ class Gateway:
         try:
             for p, m in attempts:
                 br = self.breakers.get(p)
+                if br.state == "closed" and await self._shared_open(p):
+                    errors.append(f"{p}/{m}: circuit open (shared)")
+                    continue
                 if not br.allow():
                     errors.append(f"{p}/{m}: circuit open")
                     continue
@@ -123,6 +147,8 @@ class Gateway:
                     upstream_fault = e.status in (0, 408, 429) or e.status >= 500
                     if upstream_fault:
                         br.failure()
+                        if br.state == "open":
+                            await self._share_open(p, br.cooldown)
                     await M.record_upstream(self.state, p, not upstream_fault, time.monotonic() - t0)
                     M.BREAKER.labels(p).set(0 if br.state == "closed" else 1)
                     errors.append(str(e))
@@ -189,6 +215,42 @@ class Gateway:
                      if v.get("enabled") is not False]
             return {"object": "list", "data": data}
 
+        @r.post("/v1/embeddings")
+        async def embeddings(request: Request):
+            """向量接口：直通 OpenAI 兼容上游（openai / deepseek / selfhosted 等）。"""
+            body = await request.json()
+            t0 = time.time()
+            ctx = await self.hooks.authenticate(request)
+            m = str(body.get("model") or "")
+            if not m or body.get("input") in (None, "", []):
+                raise HTTPException(400, "model 与 input 不能为空")
+            info = self.cfg["models"].get(m) or {}
+            p = info.get("provider") or guess_provider(m) or "openai"
+            if p not in ctx.upstream:
+                raise HTTPException(503, f"未配置上游 {p}")
+            if not hasattr(self.provider(p), "embeddings"):
+                raise HTTPException(400, f"上游 {p} 暂不支持 embeddings")
+            if not self.hooks.allow_model(ctx, m):
+                raise HTTPException(403, f"该 API Key 无权使用模型 {m}")
+            inp = body["input"]
+            est = max(1, len(json.dumps(inp, ensure_ascii=False)) // 3)
+            await self.hooks.check_quota(ctx, est, m)
+            await self.hooks.reserve(ctx, est, 1, [(p, m)])
+            try:
+                res = await self.provider(p).embeddings(m, {k: v for k, v in body.items() if k != "model"}, ctx.upstream[p][0])
+            except UpstreamError as e:
+                await self.hooks.release(ctx)
+                raise HTTPException(502, {"message": "上游失败", "attempts": [str(e)]})
+            except BaseException:
+                await self.hooks.release(ctx)
+                raise
+            u = res.get("usage") or {}
+            usage = {"prompt_tokens": int(u.get("prompt_tokens") or u.get("total_tokens") or est), "completion_tokens": 0}
+            from .router import Decision
+            dec = Decision(m, [m], "explicit", "embeddings", "embeddings")
+            await self._record(ctx, dec, p, m, usage, t0)
+            return JSONResponse(res, headers={"X-Router-Model": m, "X-Router-Provider": p})
+
         @r.post("/v1/chat/completions")
         async def chat(request: Request):
             body = await request.json()
@@ -243,7 +305,7 @@ class Gateway:
         @r.get("/healthz")
         async def health():
             """存活检查：进程在即返回 200。"""
-            return {"ok": True}
+            return {"ok": True, "core": getattr(self.core, "name", "custom")}
 
         @r.get("/readyz")
         async def ready():

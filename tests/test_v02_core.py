@@ -124,6 +124,6 @@ def test_metrics_and_health(app, upstream):
     chat(app)
     m = app.get("/metrics").text
     assert "autollm_upstream_requests_total" in m and 'provider="openai"' in m
-    assert app.get("/healthz").json() == {"ok": True}
+    assert app.get("/healthz").json() ["ok"] is True
     r = app.get("/readyz")
     assert r.status_code == 200 and r.json()["checks"]["state"] is True

@@ -8,7 +8,7 @@ import asyncio, json, logging, os
 from datetime import datetime, timezone
 import httpx
 
-from .webhook_guard import WebhookURLError, validate_webhook_url
+from .webhook_guard import WebhookURLError, pinned_target, validate_webhook_url
 from sqlalchemy import func, select
 
 from autollm_gate.metrics import summarize
@@ -66,8 +66,10 @@ class Alerter:
         url = c["alert_webhook_url"].strip()
         if url:
             try:
-                await validate_webhook_url(url)
-                r = await self.client.post(url, json=webhook_payload(c["alert_webhook_format"], title, message, severity, kind))
+                ip = await validate_webhook_url(url)
+                target, hdrs, ext = pinned_target(url, ip)  # 直连已校验 IP，防 DNS rebinding
+                r = await self.client.post(target, headers=hdrs, extensions=ext,
+                                           json=webhook_payload(c["alert_webhook_format"], title, message, severity, kind))
                 ev.delivered = r.status_code < 300
                 if not ev.delivered:
                     ev.delivery_error = f"HTTP {r.status_code}"

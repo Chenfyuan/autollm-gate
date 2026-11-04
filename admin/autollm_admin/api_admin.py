@@ -3,6 +3,7 @@ from __future__ import annotations
 import json, os, re
 from .webhook_guard import WebhookURLError, validate_webhook_url
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -12,7 +13,8 @@ from . import reports, security as sec
 from .alerts import DEFAULTS as ALERT_DEFAULTS, alert_settings
 from .api_console import key_out, mark_paid, tenant_brief, topup_out
 from .billing import hash_key, new_api_key, usd
-from .db import MICRO, AdminUser, AlertEvent, ApiKey, Setting, Tenant, TenantUser, Topup, UpstreamKey, Usage, iso, now
+from .governance import KeyPolicy, apply_policy, audit, audit_out, log_query, log_row, to_csv
+from .db import MICRO, AuditLog, AdminUser, AlertEvent, ApiKey, Setting, Tenant, TenantUser, Topup, UpstreamKey, Usage, iso, now
 
 SETTINGS_CHANNEL = "autollm:settings"
 
@@ -271,22 +273,71 @@ def build_admin(Session, hooks, state, alerter, channels: dict) -> APIRouter:
             return tenant_brief(t)
 
     @r.post("/tenants/{tid}/keys")
-    async def create_key(tid: str, b: KeyIn, a: AdminUser = A):
+    async def create_key(tid: str, b: KeyPolicy, request: Request, a: AdminUser = A):
         async with Session() as s:
             await get_tenant(s, tid)
             raw = new_api_key()
-            k = ApiKey(tenant_id=tid, name=b.name or "后台创建", prefix=raw[:10], key_hash=hash_key(raw))
+            k = ApiKey(tenant_id=tid, name=b.name or "后台创建", prefix=raw[:10], key_hash=hash_key(raw),
+                       allowed_models="", ip_allowlist="", spent_micro=0)
+            apply_policy(k, b, creating=True)
             s.add(k)
+            await audit(s, request, "admin", a.email, "key.create", k.prefix, tid, {"name": k.name})
             await s.commit()
             return {**key_out(k), "api_key": raw}
 
+    @r.patch("/keys/{kid}")
+    async def patch_key(kid: str, b: KeyPolicy, request: Request, a: AdminUser = A):
+        async with Session() as s:
+            k = await s.get(ApiKey, kid)
+            if not k:
+                raise HTTPException(404, "Key 不存在")
+            apply_policy(k, b)
+            await audit(s, request, "admin", a.email, "key.update", k.prefix, k.tenant_id, b.model_dump(exclude_none=True, mode="json"))
+            await s.commit()
+            return key_out(k)
+
+    @r.get("/logs")
+    async def logs(tenant_id: str | None = None, model: str | None = None, provider: str | None = None, status: str | None = None,
+                   start: str | None = None, end: str | None = None, page: int = 1, size: int = 50, format: str = "json", a: AdminUser = A):
+        size = max(1, min(size, 200))
+        async with Session() as s:
+            q = log_query(tenant_id=tenant_id, model=model, provider=provider, status=status, start=start, end=end)
+            if format == "csv":
+                rows = (await s.scalars(q.order_by(Usage.id.desc()).limit(100000))).all()
+                names = {k.id: k.name for k in await s.scalars(select(ApiKey).where(ApiKey.id.in_({x.api_key_id for x in rows if x.api_key_id})))}
+                return PlainTextResponse(to_csv([log_row(x, names) for x in rows]), media_type="text/csv; charset=utf-8",
+                                         headers={"Content-Disposition": "attachment; filename=request-logs.csv"})
+            total = await s.scalar(select(func.count()).select_from(q.subquery()))
+            rows = (await s.scalars(q.order_by(Usage.id.desc()).offset((max(page, 1) - 1) * size).limit(size))).all()
+            names = {k.id: k.name for k in await s.scalars(select(ApiKey).where(ApiKey.id.in_({x.api_key_id for x in rows if x.api_key_id})))}
+            tnames = {t.id: t.name for t in await s.scalars(select(Tenant).where(Tenant.id.in_({x.tenant_id for x in rows})))}
+        return {"total": total, "page": page, "size": size,
+                "items": [{**log_row(x, names), "tenant_name": tnames.get(x.tenant_id, "")} for x in rows]}
+
+    @r.get("/audit")
+    async def audit_list(action: str | None = None, actor: str | None = None, tenant_id: str | None = None,
+                         page: int = 1, size: int = 50, a: AdminUser = A):
+        size = max(1, min(size, 200))
+        q = select(AuditLog)
+        if action:
+            q = q.where(AuditLog.action.startswith(action))
+        if actor:
+            q = q.where(AuditLog.actor.contains(actor))
+        if tenant_id:
+            q = q.where(AuditLog.tenant_id == tenant_id)
+        async with Session() as s:
+            total = await s.scalar(select(func.count()).select_from(q.subquery()))
+            rows = (await s.scalars(q.order_by(AuditLog.id.desc()).offset((max(page, 1) - 1) * size).limit(size))).all()
+        return {"total": total, "items": [audit_out(x) for x in rows]}
+
     @r.delete("/keys/{kid}")
-    async def revoke_key(kid: str, a: AdminUser = A):
+    async def revoke_key(kid: str, request: Request, a: AdminUser = A):
         async with Session() as s:
             k = await s.get(ApiKey, kid)
             if not k:
                 raise HTTPException(404, "Key 不存在")
             k.active, k.revoked_at = False, now()
+            await audit(s, request, "admin", a.email, "key.revoke", k.prefix, k.tenant_id)
             await s.commit()
             return {"ok": True}
 

@@ -46,7 +46,8 @@ def _resolve(host: str, port: int) -> list[str]:
     return list({i[4][0].split("%")[0] for i in infos})
 
 
-async def validate_webhook_url(url: str) -> None:
+async def validate_webhook_url(url: str) -> str:
+    """校验通过后返回「已校验的 IP」，调用方必须直连该 IP（见 pinned_target），防 DNS rebinding。"""
     host, port = check_scheme(url)
     ips = await asyncio.get_running_loop().run_in_executor(None, _resolve, host, port)
     if not ips:
@@ -54,3 +55,17 @@ async def validate_webhook_url(url: str) -> None:
     for a in ips:
         if _bad_ip(ipaddress.ip_address(a)):
             raise WebhookURLError("Webhook 地址不能指向内网、本机或保留地址")
+    return ips[0]
+
+
+def pinned_target(url: str, ip: str) -> tuple[str, dict, dict]:
+    """把 URL 的主机替换成已校验 IP；保留 Host 头与 TLS SNI（证书仍按原域名校验）。"""
+    u = urlsplit(url.strip())
+    host = u.hostname
+    netloc_ip = f"[{ip}]" if ":" in ip else ip
+    if u.port:
+        netloc_ip += f":{u.port}"
+    new = u._replace(netloc=netloc_ip).geturl()
+    headers = {"Host": u.netloc.rsplit("@", 1)[-1]}
+    ext = {"sni_hostname": host} if u.scheme == "https" else {}
+    return new, headers, ext

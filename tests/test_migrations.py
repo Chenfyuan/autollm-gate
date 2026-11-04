@@ -34,4 +34,4 @@ def test_v01_db_upgrades_in_place(tmp_path):
     asyncio.run(migrate(f"sqlite:///{db}"))
     con = sqlite3.connect(db)
     assert con.execute("select name, balance_micro, reserved_micro from tenants").fetchone() == ("老客户", 5000000, 0)
-    assert con.execute("select version_num from alembic_version").fetchone()[0] == "0002_v02"
+    assert con.execute("select version_num from alembic_version").fetchone()[0] == "0003_v03"

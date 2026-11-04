@@ -27,6 +27,11 @@ class MockUpstream:
             raise httpx.ReadTimeout("simulated timeout", request=req)
         if mode:
             return httpx.Response(int(mode), json={"error": "simulated " + mode})
+        if str(req.url).endswith("/embeddings"):
+            inp = body.get("input"); n = len(inp) if isinstance(inp, list) else 1
+            return httpx.Response(200, json={"object": "list", "model": body.get("model"),
+                                             "data": [{"object": "embedding", "index": i, "embedding": [0.1, 0.2, 0.3]} for i in range(n)],
+                                             "usage": {"prompt_tokens": 8, "total_tokens": 8}})
         stream = body.get("stream") or "streamGenerateContent" in str(req.url)
         if p == "anthropic":
             if stream:
