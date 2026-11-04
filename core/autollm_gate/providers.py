@@ -4,13 +4,15 @@ import json, os, time, uuid
 from typing import AsyncIterator
 import httpx
 
-BASE_URLS = {
+_DEFAULT_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "deepseek": "https://api.deepseek.com/v1",
-    "selfhosted": os.getenv("SELFHOSTED_BASE_URL", "http://localhost:8000/v1"),
+    "selfhosted": "http://localhost:8000/v1",
     "anthropic": "https://api.anthropic.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
 }
+# 每家上游都可用 <PROVIDER>_BASE_URL 覆盖（企业代理 / 自建中转 / 测试假上游）
+BASE_URLS = {p: os.getenv(f"{p.upper()}_BASE_URL", u) for p, u in _DEFAULT_BASE_URLS.items()}
 
 
 class UpstreamError(Exception):

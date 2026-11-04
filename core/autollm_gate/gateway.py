@@ -1,23 +1,29 @@
-"""FastAPI 网关：/v1/chat/completions、/v1/messages、/v1/models。"""
+"""FastAPI 网关：/v1/chat/completions、/v1/messages、/v1/responses、/v1/models，以及 /healthz /readyz /metrics。"""
 from __future__ import annotations
-import json, logging, time
+import json, logging, os, time
+from contextlib import asynccontextmanager
 from urllib.parse import quote
 import httpx
 from fastapi import APIRouter, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from . import anthropic_compat as ac
+from . import responses_compat as rc
+from . import metrics as M
+from .breaker import Breakers
 from .hooks import Context, GatewayHooks
+from .logging_setup import fields, setup_logging
 from .providers import PROVIDER_CLASSES, UpstreamError
 from .router import STRATEGIES, estimate_tokens, load_config, select
 from .session import SessionStore, extract_session_id
+from .state import make_state
 
 log = logging.getLogger("autollm_gate")
 
 
 def guess_provider(model: str) -> str | None:
-    for prefix, p in (("gpt", "openai"), ("o1", "openai"), ("o3", "openai"), ("o4", "openai"), ("claude", "anthropic"),
-                      ("gemini", "gemini"), ("deepseek", "deepseek")):
+    for prefix, p in (("gpt", "openai"), ("o1", "openai"), ("o3", "openai"), ("o4", "openai"), ("codex", "openai"),
+                      ("claude", "anthropic"), ("gemini", "gemini"), ("deepseek", "deepseek")):
         if model.startswith(prefix):
             return p
     return None
@@ -25,22 +31,26 @@ def guess_provider(model: str) -> str | None:
 
 class Gateway:
     def __init__(self, hooks: GatewayHooks | None = None, config: dict | None = None,
-                 client: httpx.AsyncClient | None = None, base_urls: dict | None = None):
+                 client: httpx.AsyncClient | None = None, base_urls: dict | None = None, state=None, breakers: Breakers | None = None):
         self.hooks = hooks or GatewayHooks()
         self.cfg = config or load_config()
-        self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(600, connect=10))
+        timeout = float(os.getenv("UPSTREAM_TIMEOUT_SECONDS", "600"))
+        self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=float(os.getenv("UPSTREAM_CONNECT_TIMEOUT_SECONDS", "10"))),
+                                                  limits=httpx.Limits(max_connections=1000, max_keepalive_connections=200))
         self.base_urls = base_urls or {}
-        self.sessions = SessionStore()
+        self.state = state or make_state()
+        self.sessions = SessionStore(self.state)
+        self.breakers = breakers or Breakers()
 
     def provider(self, name):
         return PROVIDER_CLASSES[name](self.client, self.base_urls.get(name))
 
     # ---------- 路由决策 ----------
-    def plan(self, body: dict, ctx: Context, sid: str | None):
+    async def plan(self, body: dict, ctx: Context, sid: str | None):
         avail = set(ctx.upstream)
         if not avail:
             raise HTTPException(503, "未配置任何上游 Key")
-        sticky = self.sessions.get(sid) if sid else None
+        sticky = await self.sessions.get(sid, ctx.tenant_id) if sid else None
         is_auto = str(body.get("model", "auto")).startswith("auto")
         try:
             dec = select(body, self.cfg, avail)
@@ -56,6 +66,8 @@ class Gateway:
         attempts = []
         for m in cands:
             info = self.cfg["models"].get(m)
+            if info and info.get("enabled") is False:
+                continue
             p = info["provider"] if info else guess_provider(m)
             if p and p in avail:
                 attempts.append((p, m))
@@ -65,7 +77,7 @@ class Gateway:
 
     def headers(self, dec, provider, model, reason, tried):
         return {"X-Router-Model": model, "X-Router-Provider": provider, "X-Router-Strategy": dec.strategy,
-                "X-Router-Task": dec.task, "X-Router-Reason": quote(reason, safe=" ;=:.,-_/"),
+                "X-Router-Task": dec.task, "X-Router-Reason": quote(reason, safe=" ;=:.,-_/#"),
                 "X-Router-Attempts": str(tried)}
 
     def canonical(self, provider, model):
@@ -78,39 +90,91 @@ class Gateway:
         if not body.get("messages"):
             raise HTTPException(400, "messages 不能为空")
         sid = extract_session_id(request.headers, body)
-        dec, attempts, reason = self.plan(body, ctx, sid)
-        await self.hooks.check_quota(ctx, estimate_tokens(body["messages"]), attempts[0][1])
+        dec, attempts, reason = await self.plan(body, ctx, sid)
+        est = estimate_tokens(body["messages"])
+        await self.hooks.check_quota(ctx, est, attempts[0][1])
+        max_out = int(body.get("max_tokens") or body.get("max_completion_tokens") or 0)
+        attempts = attempts[: 1 + self.cfg.get("max_fallbacks", 3) + 2]
+        await self.hooks.reserve(ctx, est, max_out, attempts)
         clean = {k: v for k, v in body.items() if k not in ("model", "stream", "stream_options", "metadata", "prompt_cache_key")}
         stream = bool(body.get("stream"))
-        errors = []
-        for i, (p, m) in enumerate(attempts[: 1 + self.cfg.get("max_fallbacks", 3) + 2]):
-            key, _src = ctx.upstream[p]
-            try:
-                if stream:
-                    gen = self.provider(p).stream(m, clean, key)
-                    first = await gen.__anext__()  # 首包前失败可降级
-                    result = (first, gen)
-                else:
-                    result = await self.provider(p).complete(m, clean, key)
-            except StopAsyncIteration:
-                errors.append(f"{p}/{m}: empty stream"); continue
-            except UpstreamError as e:
-                errors.append(str(e)); log.warning("upstream failed: %s", e)
-                if not e.retryable:
-                    break
-                continue
-            if sid and dec.strategy != "explicit":
-                self.sessions.set(sid, self.canonical(p, m))
-            r = reason if i == 0 else f"fallback#{i} after: {errors[-1][:80]}; {reason}"
-            return ctx, dec, r, p, m, i + 1, result, stream
-        raise HTTPException(502, {"error": "所有上游均失败", "attempts": errors})
+        errors, tried = [], 0
+        try:
+            for p, m in attempts:
+                br = self.breakers.get(p)
+                if not br.allow():
+                    errors.append(f"{p}/{m}: circuit open")
+                    continue
+                key, _src = ctx.upstream[p]
+                t0 = time.monotonic()
+                tried += 1
+                try:
+                    if stream:
+                        gen = self.provider(p).stream(m, clean, key)
+                        first = await gen.__anext__()  # 首包前失败可降级
+                        result = (first, gen)
+                    else:
+                        result = await self.provider(p).complete(m, clean, key)
+                except StopAsyncIteration:
+                    br.failure(); await M.record_upstream(self.state, p, False, time.monotonic() - t0)
+                    errors.append(f"{p}/{m}: empty stream"); continue
+                except UpstreamError as e:
+                    # 4xx 参数错误不是上游故障，不计入熔断
+                    upstream_fault = e.status in (0, 408, 429) or e.status >= 500
+                    if upstream_fault:
+                        br.failure()
+                    await M.record_upstream(self.state, p, not upstream_fault, time.monotonic() - t0)
+                    M.BREAKER.labels(p).set(0 if br.state == "closed" else 1)
+                    errors.append(str(e))
+                    log.warning("upstream failed", extra=fields(provider=p, model=m, status=e.status, detail=e.detail[:200]))
+                    M.FAILOVERS.labels(p).inc()
+                    if not e.retryable:
+                        break
+                    continue
+                br.success(); M.BREAKER.labels(p).set(0)
+                await M.record_upstream(self.state, p, True, time.monotonic() - t0)
+                if sid and dec.strategy != "explicit":
+                    await self.sessions.set(sid, self.canonical(p, m), ctx.tenant_id)
+                r = reason if not errors else f"fallback#{len(errors)} after: {errors[-1][:80]}; {reason}"
+                return ctx, dec, r, p, m, tried, result, stream
+        except BaseException:
+            await self.hooks.release(ctx)
+            raise
+        await self.hooks.release(ctx)
+        if tried == 0:
+            raise HTTPException(503, {"message": "所有候选上游均处于熔断状态，请稍后重试", "attempts": errors})
+        raise HTTPException(502, {"message": "所有上游均失败", "attempts": errors})
 
     async def _record(self, ctx, dec, p, m, usage, t0, status="ok"):
+        usage = usage or {}
         try:
+            M.TOKENS.labels(m, "prompt").inc(int(usage.get("prompt_tokens", 0) or 0))
+            M.TOKENS.labels(m, "completion").inc(int(usage.get("completion_tokens", 0) or 0))
             await self.hooks.record_usage(ctx, model=self.canonical(p, m), provider=p, key_source=ctx.upstream[p][1],
-                                          usage=usage or {}, strategy=dec.strategy, latency_ms=int((time.time() - t0) * 1000), status=status)
+                                          usage=usage, strategy=dec.strategy, latency_ms=int((time.time() - t0) * 1000), status=status)
         except Exception:  # 计量失败不影响响应，但必须记录
             log.exception("record_usage failed")
+
+    def _stream_response(self, ctx, dec, p, m, res, t0, hdr, convert):
+        first, gen = res
+        usage: dict = {}
+
+        async def chain():
+            yield first
+            async for c in gen:
+                yield c
+
+        async def sse():
+            status = "ok"
+            try:
+                async for ev in convert(chain(), usage):
+                    yield ev
+            except Exception:
+                status = "stream_error"
+                log.exception("stream interrupted")
+            finally:
+                await self._record(ctx, dec, p, m, usage, t0, status)
+        return StreamingResponse(sse(), media_type="text/event-stream", headers={**hdr, "Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     def build(self) -> APIRouter:
         r = APIRouter()
@@ -121,7 +185,8 @@ class Gateway:
             now = int(time.time())
             data = [{"id": "auto", "object": "model", "created": now, "owned_by": "AutoLLM Gate"}]
             data += [{"id": f"auto:{s}", "object": "model", "created": now, "owned_by": "AutoLLM Gate"} for s in STRATEGIES]
-            data += [{"id": k, "object": "model", "created": now, "owned_by": v["provider"]} for k, v in self.cfg["models"].items()]
+            data += [{"id": k, "object": "model", "created": now, "owned_by": v["provider"]} for k, v in self.cfg["models"].items()
+                     if v.get("enabled") is not False]
             return {"object": "list", "data": data}
 
         @r.post("/v1/chat/completions")
@@ -133,21 +198,14 @@ class Gateway:
             if not stream:
                 await self._record(ctx, dec, p, m, res.get("usage"), t0)
                 return JSONResponse(res, headers=hdr)
-            first, gen = res
-            usage = {}
 
-            async def sse():
-                try:
-                    for c in [first]:
-                        if c.get("usage"): usage.update(c["usage"])
-                        yield f"data: {json.dumps(c, ensure_ascii=False)}\n\n"
-                    async for c in gen:
-                        if c.get("usage"): usage.update(c["usage"])
-                        yield f"data: {json.dumps(c, ensure_ascii=False)}\n\n"
-                    yield "data: [DONE]\n\n"
-                finally:
-                    await self._record(ctx, dec, p, m, usage, t0)
-            return StreamingResponse(sse(), media_type="text/event-stream", headers=hdr)
+            async def conv(chunks, usage):
+                async for c in chunks:
+                    if c.get("usage"):
+                        usage.update(c["usage"])
+                    yield f"data: {json.dumps(c, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
+            return self._stream_response(ctx, dec, p, m, res, t0, hdr, conv)
 
         @r.post("/v1/messages")
         async def messages(request: Request):
@@ -160,21 +218,21 @@ class Gateway:
             if not stream:
                 await self._record(ctx, dec, p, m, res.get("usage"), t0)
                 return JSONResponse(ac.openai_to_message(res, self.canonical(p, m)), headers=hdr)
-            first, gen = res
-            usage = {}
+            return self._stream_response(ctx, dec, p, m, res, t0, hdr,
+                                         lambda ch, u: ac.openai_stream_to_anthropic(ch, self.canonical(p, m), u))
 
-            async def chain():
-                yield first
-                async for c in gen:
-                    yield c
-
-            async def sse():
-                try:
-                    async for ev in ac.openai_stream_to_anthropic(chain(), self.canonical(p, m), usage):
-                        yield ev
-                finally:
-                    await self._record(ctx, dec, p, m, usage, t0)
-            return StreamingResponse(sse(), media_type="text/event-stream", headers=hdr)
+        @r.post("/v1/responses")
+        async def responses(request: Request):
+            rbody = await request.json()
+            body = rc.responses_to_chat(rbody)
+            t0 = time.time()
+            ctx, dec, reason, p, m, tried, res, stream = await self.run(request, body)
+            hdr = self.headers(dec, p, m, reason, tried)
+            if not stream:
+                await self._record(ctx, dec, p, m, res.get("usage"), t0)
+                return JSONResponse(rc.chat_to_response(res, self.canonical(p, m)), headers=hdr)
+            return self._stream_response(ctx, dec, p, m, res, t0, hdr,
+                                         lambda ch, u: rc.chat_stream_to_responses(ch, self.canonical(p, m), u))
 
         @r.post("/v1/messages/count_tokens")
         async def count_tokens(request: Request):
@@ -184,14 +242,63 @@ class Gateway:
 
         @r.get("/healthz")
         async def health():
+            """存活检查：进程在即返回 200。"""
             return {"ok": True}
+
+        @r.get("/readyz")
+        async def ready():
+            """就绪检查：数据库 / Redis 等依赖可用才返回 200，负载均衡据此摘除实例。"""
+            checks = {"state": await self.state.ping()}
+            try:
+                checks.update(await self.hooks.ready())
+            except Exception:
+                checks["hooks"] = False
+            ok = all(checks.values())
+            return JSONResponse({"ok": ok, "checks": checks, "breakers": self.breakers.snapshot()}, status_code=200 if ok else 503)
+
+        @r.get("/metrics")
+        async def metrics(request: Request):
+            tok = os.getenv("METRICS_TOKEN")
+            if tok and request.headers.get("authorization") != f"Bearer {tok}":
+                raise HTTPException(401, "metrics 需要令牌")
+            data, ctype = M.render()
+            return Response(data, media_type=ctype)
         return r
 
 
-def create_app(hooks: GatewayHooks | None = None, **kw) -> FastAPI:
-    app = FastAPI(title="AutoLLM Gate", version="0.1.0")
+def create_app(hooks: GatewayHooks | None = None, lifespan_hooks: list | None = None, **kw) -> FastAPI:
+    setup_logging()
     gw = Gateway(hooks, **kw)
+    extra = lifespan_hooks or []
+
+    @asynccontextmanager
+    async def lifespan(app):
+        for start, _ in extra:
+            await start(app)
+        yield
+        for _, stop in reversed(extra):
+            await stop(app)
+        await gw.state.close()
+
+    app = FastAPI(title="AutoLLM Gate", version="0.2.0", lifespan=lifespan)
     app.state.gateway = gw
+
+    @app.middleware("http")
+    async def access_log(request: Request, call_next):
+        t0 = time.time()
+        try:
+            resp = await call_next(request)
+        except Exception:
+            log.exception("unhandled error", extra=fields(path=request.url.path))
+            resp = JSONResponse({"error": {"message": "服务器内部错误"}}, status_code=500)
+        path = request.url.path
+        ep = path if path.startswith("/v1/") or path in ("/healthz", "/readyz", "/metrics") else ("/api" if path.startswith("/api/") else "static")
+        M.REQUESTS.labels(ep, str(resp.status_code)).inc()
+        if ep not in ("static", "/healthz", "/readyz", "/metrics"):
+            log.info("request", extra=fields(method=request.method, path=path, status=resp.status_code,
+                                             ms=int((time.time() - t0) * 1000), model=resp.headers.get("x-router-model")))
+        return resp
+
     app.include_router(gw.build())
 
     @app.exception_handler(HTTPException)

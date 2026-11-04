@@ -1,6 +1,6 @@
-"""会话粘性：同一会话固定使用首次选中的模型，提高上游缓存命中并保证体验一致。"""
+"""会话粘性：同一会话固定使用首次选中的模型，提高上游缓存命中并保证体验一致。存储在共享状态（Redis）中，多实例一致。"""
 from __future__ import annotations
-import hashlib, time, threading
+import hashlib, os
 
 HEADER_CANDIDATES = ("x-session-id", "x-claude-code-session-id", "session_id", "x-codex-session-id", "conversation_id")
 
@@ -30,17 +30,22 @@ def extract_session_id(headers, body: dict) -> str | None:
 
 
 class SessionStore:
-    def __init__(self, ttl: int = 3600):
-        self.ttl, self._d, self._lock = ttl, {}, threading.Lock()
+    def __init__(self, state, ttl: int | None = None):
+        self.state = state
+        self.ttl = ttl or int(os.getenv("SESSION_STICKY_TTL", "3600"))
 
-    def get(self, sid: str):
-        with self._lock:
-            v = self._d.get(sid)
-            if v and v[1] > time.time():
-                return v[0]
-            self._d.pop(sid, None)
+    @staticmethod
+    def _k(sid):
+        return "sticky:" + hashlib.sha256(sid.encode()).hexdigest()[:32]
+
+    async def get(self, sid: str, scope: str = ""):
+        try:
+            return await self.state.get(self._k(scope + "|" + sid))
+        except Exception:
             return None
 
-    def set(self, sid: str, model: str):
-        with self._lock:
-            self._d[sid] = (model, time.time() + self.ttl)
+    async def set(self, sid: str, model: str, scope: str = ""):
+        try:
+            await self.state.set(self._k(scope + "|" + sid), model, ttl=self.ttl)
+        except Exception:
+            pass
