@@ -102,10 +102,10 @@ resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "
 | 运营概览 | 监控告警 |
 |---|---|
 | ![运营概览](docs/assets/admin-overview.png) | ![监控告警](docs/assets/admin-monitoring.png) |
-| **上游密钥** | **计费与告警设置** |
-| ![上游密钥](docs/assets/admin-upstreams.png) | ![计费与告警设置](docs/assets/admin-billing-settings.png) |
-| **租户管理** | **账单明细** |
-| ![租户管理](docs/assets/admin-tenants.png) | ![账单明细](docs/assets/tenant-billing.png) |
+| **上游密钥** | **租户管理** |
+| ![上游密钥](docs/assets/admin-upstreams.png) | ![租户管理](docs/assets/admin-tenants.png) |
+| **账单明细** | |
+| ![账单明细](docs/assets/tenant-billing.png) | |
 
 截图中的租户、金额均为演示数据。
 
