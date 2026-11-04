@@ -72,6 +72,13 @@ class Usage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 
 
+class Setting(Base):
+    """后台可改的全局配置（覆盖环境变量默认值）。"""
+    __tablename__ = "settings"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(200))
+
+
 class Topup(Base):
     __tablename__ = "topups"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=uid)

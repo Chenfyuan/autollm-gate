@@ -13,7 +13,7 @@ from .payments import build_channels
 def build(database_url: str | None = None, master_key: str | None = None, **gw_kw):
     Session = make_sessionmaker(database_url)
     cfg = gw_kw.pop("config", None) or load_config()
-    hooks = BillingHooks(Session, KeyVault(master_key), Pricing(cfg))
+    hooks = BillingHooks(Session, KeyVault(master_key), Pricing(cfg).load(Session))
     app = create_app(hooks, config=cfg, **gw_kw)
     app.include_router(build_admin(Session, hooks, build_channels(os.getenv("ENABLE_MOCK_PAYMENT") == "1")))
     app.state.Session = Session

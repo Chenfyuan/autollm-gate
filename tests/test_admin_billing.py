@@ -136,3 +136,16 @@ def test_streaming_usage_billed(app):
         "".join(r.iter_text())
     u = app.get("/admin/api/usage", headers=ADMIN).json()[0]
     assert u["prompt_tokens"] == 10 and u["completion_tokens"] == 5
+
+
+def test_markup_editable_in_admin(app):
+    assert app.get("/admin/api/settings", headers=ADMIN).json()["platform_markup_pct"] == 20
+    assert app.put("/admin/api/settings", json={"platform_markup_pct": 50}, headers=ADMIN).json()["platform_markup_pct"] == 50
+    tid, h = tenant(app)
+    app.put("/admin/api/platform/upstream", json={"provider": "openai", "api_key": "sk-platform-1234"}, headers=ADMIN)
+    app.post(f"/admin/api/tenants/{tid}/topups", json={"amount_usd": 1}, headers=ADMIN)
+    chat(app, h)
+    assert app.get("/admin/api/usage", headers=ADMIN).json()[0]["charge_usd"] == pytest.approx(0.0001125, abs=1e-6)
+    assert app.put("/admin/api/settings", json={"platform_markup_pct": -1}, headers=ADMIN).status_code == 422
+    # 租户级覆盖可清空回全局
+    assert app.patch(f"/admin/api/tenants/{tid}", json={"markup_pct": 10}, headers=ADMIN).json()["markup_pct"] == 10

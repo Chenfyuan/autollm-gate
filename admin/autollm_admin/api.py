@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from autollm_gate.providers import PROVIDER_CLASSES
 from .billing import BillingHooks, hash_key, new_api_key, usd
-from .db import MICRO, ApiKey, Tenant, Topup, UpstreamKey, Usage, now
+from .db import MICRO, ApiKey, Setting, Tenant, Topup, UpstreamKey, Usage, now
 
 
 class TenantIn(BaseModel):
@@ -32,6 +32,12 @@ class KeyIn(BaseModel):
 class UpstreamIn(BaseModel):
     provider: str
     api_key: str = Field(min_length=8)
+
+
+class SettingsIn(BaseModel):
+    platform_markup_pct: float | None = Field(default=None, ge=0, le=1000)
+    byok_fee_per_request_usd: float | None = Field(default=None, ge=0)
+    byok_fee_per_1k_tokens_usd: float | None = Field(default=None, ge=0)
 
 
 class TopupIn(BaseModel):
@@ -74,6 +80,22 @@ def build_admin(Session, hooks: BillingHooks, channels: dict) -> APIRouter:
         if not t:
             raise HTTPException(404, "租户不存在")
         return t
+
+    @r.get("/admin/api/settings", dependencies=A)
+    def get_settings():
+        return hooks.pricing.as_dict()
+
+    @r.put("/admin/api/settings", dependencies=A)
+    def put_settings(b: SettingsIn):
+        with Session() as s:
+            for k, v in b.model_dump(exclude_none=True).items():
+                row = s.get(Setting, k)
+                if row:
+                    row.value = str(v)
+                else:
+                    s.add(Setting(key=k, value=str(v)))
+            s.commit()
+        return hooks.pricing.load(Session).as_dict()
 
     @r.post("/admin/api/tenants", dependencies=A)
     def create_tenant(b: TenantIn):

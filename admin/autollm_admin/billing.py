@@ -34,6 +34,21 @@ class Pricing:
         self.byok_req = env("BYOK_FEE_PER_REQUEST_USD", "0") if byok_fee_per_request is None else byok_fee_per_request
         self.byok_1k = env("BYOK_FEE_PER_1K_TOKENS_USD", "0") if byok_fee_per_1k_tokens is None else byok_fee_per_1k_tokens
 
+    SETTING_KEYS = {"platform_markup_pct": "markup_pct", "byok_fee_per_request_usd": "byok_req",
+                    "byok_fee_per_1k_tokens_usd": "byok_1k"}
+
+    def load(self, Session):
+        """用数据库中的后台配置覆盖环境变量默认值。"""
+        from .db import Setting
+        with Session() as s:
+            for row in s.query(Setting).all():
+                if row.key in self.SETTING_KEYS:
+                    setattr(self, self.SETTING_KEYS[row.key], float(row.value))
+        return self
+
+    def as_dict(self):
+        return {k: getattr(self, a) for k, a in self.SETTING_KEYS.items()}
+
     @property
     def byok_fee_pct(self):  # 兼容：>0 表示 BYOK 也需要余额
         return 1 if (self.byok_req or self.byok_1k) else 0
