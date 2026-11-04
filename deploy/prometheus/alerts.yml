@@ -1,0 +1,45 @@
+# AutoLLM Gate Prometheus 告警规则。与网关内置告警（后台「监控告警」页 + Webhook）互为补充：
+# 内置告警覆盖业务事件（余额不足、额度耗尽），Prometheus 规则覆盖基础设施（实例宕机、5xx、熔断）。
+groups:
+  - name: autollm-gate
+    rules:
+      - alert: GateInstanceDown
+        expr: up{job="autollm-gate"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "网关实例 {{ $labels.instance }} 不可达"
+      - alert: UpstreamErrorRateHigh
+        expr: |
+          sum by (provider) (rate(autollm_upstream_requests_total{outcome="error"}[5m]))
+            / sum by (provider) (rate(autollm_upstream_requests_total[5m])) > 0.2
+          and sum by (provider) (rate(autollm_upstream_requests_total[5m])) > 0.1
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "上游 {{ $labels.provider }} 5 分钟错误率超过 20%"
+      - alert: UpstreamCircuitOpen
+        expr: max by (provider) (autollm_breaker_open) == 1
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "上游 {{ $labels.provider }} 熔断中"
+      - alert: UpstreamLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le, provider) (rate(autollm_upstream_latency_seconds_bucket[5m]))) > 20
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "上游 {{ $labels.provider }} P95 延迟超过 20 秒"
+      - alert: Gateway5xxHigh
+        expr: |
+          sum(rate(autollm_http_requests_total{code=~"5.."}[5m])) / sum(rate(autollm_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "网关 5xx 比例超过 5%"
+      - alert: RateLimitSpike
+        expr: sum(rate(autollm_rate_limited_total[5m])) > 5
+        for: 10m
+        labels: {severity: info}
+        annotations:
+          summary: "限流次数持续偏高，可能有滥用或租户需要提额"

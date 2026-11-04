@@ -1,0 +1,10 @@
+.git
+.venv
+**/__pycache__
+**/node_modules
+web/dist
+admin/autollm_admin/static
+.env
+*.db
+.pytest_cache
+build

@@ -5,3 +5,10 @@ __pycache__/
 *.db
 .env
 build/
+.env.*
+!.env.example
+web/node_modules/
+web/dist/
+admin/autollm_admin/static/
+*.jsonl
+*.log
