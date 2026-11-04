@@ -1,0 +1,1 @@
+export default { content: ['./index.html','./main.js'], darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter','"PingFang SC"','"Noto Sans SC"','"Microsoft YaHei"','system-ui','sans-serif'] } } } }

@@ -1,87 +1,149 @@
-# AutoLLM Gate v0.2
+<p align="center">
+  <img src="docs/assets/wordmark.svg" alt="AutoLLM Gate" height="56">
+</p>
 
-一个兼容 OpenAI / Anthropic / Responses 协议的大模型网关：`model: "auto"` 时按任务类型与成本自动选模型，失败自动切换；自带多租户计费、开发者控制台与运营后台。
+<p align="center"><b>按量计费的商用大模型网关。</b>一个 API 地址接入多家模型，自动选模型、自动容灾，按实际用量向你的用户收费。</p>
 
-## 功能概览
+<p align="center">
+  <img alt="version" src="https://img.shields.io/badge/version-v0.2-0f172a">
+  <img alt="protocols" src="https://img.shields.io/badge/协议-OpenAI%20%7C%20Anthropic%20%7C%20Responses-0ea5e9">
+  <img alt="python" src="https://img.shields.io/badge/Python-3.11-3776ab">
+  <img alt="deploy" src="https://img.shields.io/badge/部署-Docker%20Compose-2496ed">
+  <img alt="license" src="https://img.shields.io/badge/license-All%20rights%20reserved-64748b">
+</p>
 
-**网关**
-- 接口：`/v1/chat/completions`、`/v1/messages`、`/v1/responses`（均支持流式与非流式）
-- 自动路由 + 会话粘性（Redis 共享，多实例一致）
-- 失败切换：上游 429 / 5xx / 超时自动换下一个候选；4xx 参数错误直接返回、不计入熔断
-- 熔断器：连续失败达到阈值后暂停调用该上游，冷却后放行一个探测请求，成功即恢复
-- 健康检查 `/healthz`、就绪检查 `/readyz`（检查数据库与 Redis）、Prometheus 指标 `/metrics`（可用 `METRICS_TOKEN` 保护）
-- 结构化 JSON 日志
+<p align="center">
+  <img src="docs/assets/tenant-usage.png" alt="开发者控制台 · 用量分析" width="860">
+</p>
 
-**计费**
-- 预扣/结算：请求前按最贵候选模型冻结额度（单条 SQL 原子条件更新，绝不透支），完成后按实际用量结算、多退少补
-- 平台统一加价、租户单独加价、自带密钥服务费，修改后通过 Redis 广播到所有实例立即生效
+## 它解决什么问题
 
-**开发者控制台**（`/`）：注册/登录、概览、用量分析、账单明细、API 密钥（只在创建时显示一次）、余额充值、模型与价格、快速开始。
+团队要同时用 OpenAI、Anthropic、DeepSeek、Gemini 和自部署模型时，通常会遇到三件事：每家接口不一样；某家限流或故障时业务跟着出错；给内部团队或外部客户分账很麻烦。
 
-**运营后台**（`/admin`）：运营概览、租户管理（可下钻）、模型与价格、上游密钥（加密存储、只显示掩码）、监控告警（各上游错误率/延迟/熔断状态）、计费与告警设置、管理员账号。
+AutoLLM Gate 放在你的应用和各家模型之间：
 
-**安全**
-- 密码 argon2id 哈希；登录态为 HttpOnly + SameSite 的签名 JWT Cookie，配合 CSRF 头校验；改密/禁用即吊销会话
-- 上游密钥用 `MASTER_KEY` 加密落库
-- 注册、登录、API 调用均有限流（按 IP / 按密钥 RPM）
-- 告警 Webhook 防 SSRF：生产环境只允许 https；保存时和每次发送前都会解析域名，拒绝内网、本机、链路本地、保留和组播地址（IPv4/IPv6）
-- 只有 ha 模式（网关仅经 nginx 访问、nginx 用真实来源地址覆盖 `X-Forwarded-For` / `X-Real-IP`）才开启 `TRUST_PROXY`；单实例默认关闭
-- 生产环境（`ENV=production`）拒绝开启模拟支付、拒绝过短的 `SESSION_SECRET`
+- **一个地址，三种协议。** 现有的 OpenAI SDK、Anthropic SDK、Responses 客户端改个 Base URL 就能用。
+- **`model: "auto"`。** 按任务类型和成本挑模型；同一会话保持在同一个模型上。
+- **出错自动换。** 上游 429、5xx、超时会切到下一个候选模型；连续失败的上游会被熔断，恢复后自动放回。
+- **按量计费。** 每次请求先冻结额度、完成后按实际 tokens 结算，不会透支；平台加价、租户单独加价都能在后台改。
 
-**告警**：上游错误率突增、租户余额不足、月度额度将满，推送到 Webhook（支持通用 JSON / 飞书 / 企业微信 / 钉钉 / Slack），同一告警在冷却期内只发一次；多实例时通过 Redis 选主，只有一个实例负责评估。另附 Prometheus 告警规则 `deploy/prometheus/alerts.yml`。
+和直接调用各家 API 相比，差别在于：路由、容灾、计费、自助门户和运营后台是一套东西，部署后就能对外收费。
 
-## 部署
+## 功能
+
+| 模块 | 内容 |
+|---|---|
+| 网关 | `/v1/chat/completions`、`/v1/messages`、`/v1/responses`，流式与非流式；自动路由；会话粘性（Redis 共享） |
+| 稳定性 | 失败切换（429 / 5xx / 超时）、按上游熔断、按 IP 与按密钥限流、`/healthz` `/readyz`、Prometheus `/metrics` |
+| 计费 | 原子预扣与结算、平台与租户两级加价、自带密钥服务费，改动即时同步到所有实例 |
+| 开发者控制台 | 注册登录、概览、用量分析、账单明细、API 密钥、余额充值、模型价格、快速开始 |
+| 运营后台 | 收入与成本概览、租户管理、模型与价格、上游密钥（加密存储、只显示掩码）、监控告警、管理员 |
+| 告警 | 上游错误率突增、余额不足、月度额度将满；推送到飞书、企业微信、钉钉、Slack 或通用 Webhook |
+| 安全 | argon2id 密码哈希、HttpOnly 签名 Cookie + CSRF 校验、Webhook 防 SSRF、生产模式启动检查 |
+
+## 实测数据
+
+以下数据来自 [验收记录](docs/ACCEPTANCE.md)。**上游是本地假上游（约 40ms 固定延迟），不代表真实模型的延迟**，测的是网关本身的吞吐和容灾能力。环境：单机 Docker，2 个网关实例 + nginx + Postgres 16 + Redis 7。
+
+| 场景 | 结果 |
+|---|---|
+| 并发 50，持续 60 秒 | 23,496 次请求，390.7 RPS，p50 109ms，p95 236ms，错误率 0% |
+| 运行中停掉一家上游 30 秒（20 RPS） | 1,379 次请求 0 失败；0.15 秒开始切换，0.71 秒熔断生效，恢复后 0.43 秒流量回切 |
+
+## 架构
+
+```mermaid
+flowchart LR
+  A[你的应用 / SDK] -->|OpenAI · Anthropic · Responses| N[nginx]
+  N --> G1[Gate 实例 1]
+  N --> G2[Gate 实例 2]
+  G1 & G2 --> R[(Redis<br/>会话粘性 · 限流 · 设置广播)]
+  G1 & G2 --> P[(Postgres<br/>租户 · 账单 · 密钥密文)]
+  G1 & G2 -->|路由 · 切换 · 熔断| U1[OpenAI]
+  G1 & G2 --> U2[Anthropic]
+  G1 & G2 --> U3[DeepSeek / Gemini]
+  G1 & G2 --> U4[自部署模型]
+  M[Prometheus] -.抓取 /metrics.-> G1 & G2
+  G1 -.告警.-> W[飞书 / 企业微信 / 钉钉 / Slack]
+```
+
+## 快速开始
 
 ```bash
-cp .env.example .env      # 填写 MASTER_KEY、SESSION_SECRET、POSTGRES_PASSWORD、ADMIN_BOOTSTRAP_*、上游密钥
+git clone https://github.com/Chenfyuan/autollm-gate.git && cd autollm-gate
+cp .env.example .env        # 按注释填写主密钥、会话密钥、数据库密码、首个管理员
 docker compose up -d --build
 ```
 
-`.env` 中 `COMPOSE_PROFILES` 决定部署形态：
+启动后，开发者控制台在 `/`，运营后台在 `/admin`。在后台「上游密钥」里填入各家模型的密钥即可开始路由。
 
-| 取值 | 内容 |
+调用示例（把 Base URL 换成你的网关地址）：
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="https://<你的网关域名>/v1", api_key="<控制台创建的密钥>")
+resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "content": "你好"}])
+```
+
+## 部署形态
+
+在 `.env` 里用 `COMPOSE_PROFILES` 选择：
+
+| 形态 | 包含 |
 |---|---|
-| `single` | 单个网关实例 + Postgres + Redis，端口 8080 |
-| `ha` | 两个网关实例（gate-1 / gate-2）+ nginx 负载均衡（8080），共享 Postgres 与 Redis |
-| `ha,monitoring` | 在 ha 基础上加 Prometheus（9090），已加载告警规则 |
+| `single` | 1 个网关 + Postgres + Redis，适合试用 |
+| `ha` | 2 个网关 + nginx 负载均衡，共享 Postgres 与 Redis |
+| `ha,monitoring` | 在 ha 基础上加 Prometheus 与预置告警规则 |
 
-- 容器启动时自动执行数据库迁移（Alembic，Postgres 上有 advisory lock，多实例同时启动也安全）；v0.1 的数据库会被识别并原地升级。
-- 首个管理员由 `ADMIN_BOOTSTRAP_EMAIL` / `ADMIN_BOOTSTRAP_PASSWORD` 创建（仅当还没有管理员时），之后可在后台添加更多管理员。
-- 生产请在 nginx 前加 TLS，并设置 `COOKIE_SECURE=1`。单实例默认不信任代理头；ha 模式已自动开启。若在 nginx 前再加一层代理，需让外层也覆盖这两个头。
-- `/metrics` 在 nginx 上默认对外屏蔽，Prometheus 直接抓取各实例。
+环境变量、TLS、代理头、数据库迁移等细节见 [部署与配置详解](docs/DEPLOYMENT.md)。
 
-手动迁移：`python -m autollm_admin.migrate`。
+## 界面
 
-## 主要环境变量
-
-| 变量 | 说明 |
+| 运营概览 | 监控告警 |
 |---|---|
-| `DATABASE_URL` / `REDIS_URL` | 数据库与 Redis；不配 Redis 时退化为单进程内存状态（仅开发用） |
-| `MASTER_KEY` | 上游密钥加密主密钥 |
-| `SESSION_SECRET` | 登录态签名密钥，≥32 字符 |
-| `ENV` | `production` 时启用安全检查 |
-| `ENABLE_MOCK_PAYMENT` | 模拟支付，仅测试环境 |
-| `DEFAULT_KEY_RPM` / `SIGNUP_RATE` / `LOGIN_RATE` | 限流 |
-| `BREAKER_THRESHOLD` / `BREAKER_COOLDOWN` | 熔断阈值与冷却秒数 |
-| `ALERT_INTERVAL` | 告警评估间隔（秒） |
+| ![运营概览](docs/assets/admin-overview.png) | ![监控告警](docs/assets/admin-monitoring.png) |
+| **上游密钥** | **计费与告警设置** |
+| ![上游密钥](docs/assets/admin-upstreams.png) | ![计费与告警设置](docs/assets/admin-billing-settings.png) |
+| **租户管理** | **账单明细** |
+| ![租户管理](docs/assets/admin-tenants.png) | ![账单明细](docs/assets/tenant-billing.png) |
 
-完整列表见 `.env.example`。
+截图中的租户、金额均为演示数据。
+
+## 路线图与已知差距
+
+已完成（v0.2）：三协议网关、自动路由与失败切换、熔断、限流、原子计费、开发者控制台、运营后台、监控告警、高可用部署。
+
+规划中：
+
+- 真实支付渠道（微信支付 / 支付宝 / Stripe）——目前为占位，尚不可用
+- 接入真实模型的端到端测试——目前只在假上游上验证
+- 熔断状态在多实例间共享（目前各实例独立判断）
+- 超时切换的整栈演练（目前只有单元测试）
+- Postgres / Redis / nginx 冗余与内置 TLS（目前为单点，需自行在前面加 TLS）
+- Webhook 发送时直连已校验的 IP，消除 DNS 重绑定窗口
+- 监控页 p50/p95 改为精确值（目前为直方图近似）
+
+## 常见问题
+
+**现有代码要改多少？** 一般只改 Base URL 和 API Key。模型名可以写具体模型，也可以写 `auto`。
+
+**某家模型挂了会怎样？** 请求会切到下一个候选模型；该上游连续失败后被熔断跳过，恢复后自动放回。参数错误（4xx）不会切换，直接返回给调用方。
+
+**能不能用自己的模型密钥？** 可以。平台统一密钥和租户自带密钥都支持，自带密钥可单独设服务费。
+
+**密钥安全吗？** 上游密钥用主密钥加密后存库，界面和接口只显示末 4 位；租户 API 密钥只在创建时显示一次。
+
+**现在能直接收钱吗？** 还不能。计费、余额、账单已完成，但真实支付渠道仍在规划中。
 
 ## 开发
 
 ```bash
 pip install -r requirements-dev.lock && pip install -e .
-pytest                                  # 设置 TEST_DATABASE_URL 可额外跑 Postgres 并发测试
-cd web && npm ci && npm run typecheck && npm run build
+pytest
+cd web && npm ci && npm run build
+cd site && npm ci && npm run build   # 官网，产物在 site/dist
 ```
 
-辅助脚本（`scripts/`）：`fake_upstream.py` 假上游、`seed_demo.py` 演示数据、`loadtest.py` 压测与故障切换探测、`alert_receiver.py` 本地 Webhook 接收器、`screenshots.py` 页面截图。
+## 许可
 
-验收记录见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
-
-## 已知限制
-
-- 熔断状态按进程独立统计（各实例各自判断），未在 Redis 共享
-- 真实支付渠道（微信/支付宝/Stripe）仍为占位，需对接商户号
-- Postgres / Redis / nginx 仍为单点，生产需换托管或主从方案
-- 监控页 P50/P95 为直方图分桶上界，属近似值
+源码可查看，但**不是开源软件**。版权所有（All rights reserved），未经书面许可，不得使用、复制、修改或分发。详见 [LICENSE](LICENSE)。
