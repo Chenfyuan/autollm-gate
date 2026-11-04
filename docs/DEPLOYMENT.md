@@ -90,6 +90,7 @@ curl http://localhost:8080/v1/chat/completions \
 
 ### 常见问题
 
+- **想让同一局域网的其他设备（手机、另一台电脑）访问**：快速体验默认只监听本机 `127.0.0.1`，局域网里的其他设备访问不到，这是为了避免管理后台被同网络的人看到。确实需要时，在 `.env` 里加一行 `GATE_BIND=0.0.0.0`，执行 `docker compose -f docker-compose.quickstart.yml up -d` 重启，其他设备用 `http://<本机局域网 IP>:8080` 访问。用完建议改回 `127.0.0.1`，并确保管理员密码足够强。
 - **提示端口 8080 被占用**（`port is already allocated`）：打开 `.env`，把 `GATE_PORT=8080` 改成 `18080`，重新启动后访问 <http://localhost:18080>；运行演示脚本时用 `GATE=http://localhost:18080 sh quickstart-demo.sh`。
 - **Apple 芯片 Mac 能用吗**：能。镜像同时提供 Intel/AMD（amd64）和 ARM（arm64）版本，Docker 会自动下载适合你电脑的那个，不需要 Rosetta。
 - **数据存在哪**：在 Docker 数据卷 `autollm_pgdata`（数据库）和 `autollm_redisdata`（缓存）里，可在 Docker Desktop 的「Volumes」页面看到。`down` 不会删除它们，`down -v` 会。

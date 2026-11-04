@@ -350,7 +350,7 @@ def create_app(hooks: GatewayHooks | None = None, lifespan_hooks: list | None = 
             await stop(app)
         await gw.state.close()
 
-    app = FastAPI(title="AutoLLM Gate", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="AutoLLM Gate", version="0.3.0", lifespan=lifespan)
     app.state.gateway = gw
 
     @app.middleware("http")

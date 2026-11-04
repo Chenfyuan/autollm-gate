@@ -12,7 +12,7 @@ RUN npm run build
 FROM python:3.11-slim
 LABEL org.opencontainers.image.source=https://github.com/Chenfyuan/autollm-gate \
       org.opencontainers.image.description="AutoLLM Gate 网关 + 管理后台 + 租户门户（单镜像）" \
-      org.opencontainers.image.licenses="LicenseRef-All-Rights-Reserved"
+      org.opencontainers.image.licenses="LicenseRef-AllRightsReserved"
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 ENV=production STATIC_DIR=/app/static PORT=8080
 # 先按锁文件（含哈希）安装依赖，再无依赖安装本项目，保证构建可复现

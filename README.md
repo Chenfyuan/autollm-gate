@@ -5,7 +5,7 @@
 <p align="center"><b>按量计费的商用大模型网关。</b>一个 API 地址接入多家模型，自动选模型、自动容灾，按实际用量向你的用户收费。</p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-v0.2-0f172a">
+  <img alt="version" src="https://img.shields.io/badge/version-v0.3-0f172a">
   <img alt="protocols" src="https://img.shields.io/badge/协议-OpenAI%20%7C%20Anthropic%20%7C%20Responses-0ea5e9">
   <img alt="python" src="https://img.shields.io/badge/Python-3.11-3776ab">
   <img alt="deploy" src="https://img.shields.io/badge/部署-Docker%20Compose-2496ed">
