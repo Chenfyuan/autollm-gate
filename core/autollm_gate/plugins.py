@@ -10,6 +10,7 @@
   name: str
   select(body, cfg, available_providers) -> router.Decision     # 路由决策
   pricing_class: type                                            # 继承 autollm_admin.billing.Pricing 的计价类
+  observe(provider, ok, latency_s) -> None                       # 每次上游调用结果回调（健康度统计）
 """
 from __future__ import annotations
 import importlib, logging, os

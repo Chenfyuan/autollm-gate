@@ -44,9 +44,9 @@ def test_ip_allowlist(app):
 
 
 def test_ip_allowlist_behind_proxy(app, monkeypatch):
-    monkeypatch.setenv("TRUST_PROXY_HEADERS", "1")
+    monkeypatch.setenv("TRUST_PROXY", "1")
     _, _, h = setup(app, ip_allowlist=["203.0.113.0/24"])
-    assert chat(app, h | {"X-Forwarded-For": "203.0.113.9, 10.0.0.1"}).status_code == 200
+    assert chat(app, h | {"X-Forwarded-For": "10.0.0.1, 203.0.113.9"}).status_code == 200
     assert chat(app, h | {"X-Forwarded-For": "198.51.100.1"}).status_code == 403
 
 

@@ -78,6 +78,14 @@ class Gateway:
             raise HTTPException(503, f"没有可用上游可服务模型 {body.get('model')}")
         return dec, attempts, reason
 
+    def _observe(self, p, ok, latency):
+        fn = getattr(self.core, "observe", None)
+        if fn:
+            try:
+                fn(p, ok, latency)
+            except Exception:
+                log.exception("core observe failed")
+
     # ---------- 跨副本共享熔断：某副本熔断后写入 Redis，其他副本在冷却期内同样跳过该上游 ----------
     async def _shared_open(self, p) -> bool:
         try:
@@ -140,7 +148,7 @@ class Gateway:
                     else:
                         result = await self.provider(p).complete(m, clean, key)
                 except StopAsyncIteration:
-                    br.failure(); await M.record_upstream(self.state, p, False, time.monotonic() - t0)
+                    br.failure(); await M.record_upstream(self.state, p, False, time.monotonic() - t0); self._observe(p, False, time.monotonic() - t0)
                     errors.append(f"{p}/{m}: empty stream"); continue
                 except UpstreamError as e:
                     # 4xx 参数错误不是上游故障，不计入熔断
@@ -149,7 +157,7 @@ class Gateway:
                         br.failure()
                         if br.state == "open":
                             await self._share_open(p, br.cooldown)
-                    await M.record_upstream(self.state, p, not upstream_fault, time.monotonic() - t0)
+                    await M.record_upstream(self.state, p, not upstream_fault, time.monotonic() - t0); self._observe(p, not upstream_fault, time.monotonic() - t0)
                     M.BREAKER.labels(p).set(0 if br.state == "closed" else 1)
                     errors.append(str(e))
                     log.warning("upstream failed", extra=fields(provider=p, model=m, status=e.status, detail=e.detail[:200]))
@@ -158,7 +166,7 @@ class Gateway:
                         break
                     continue
                 br.success(); M.BREAKER.labels(p).set(0)
-                await M.record_upstream(self.state, p, True, time.monotonic() - t0)
+                await M.record_upstream(self.state, p, True, time.monotonic() - t0); self._observe(p, True, time.monotonic() - t0)
                 if sid and dec.strategy != "explicit":
                     await self.sessions.set(sid, self.canonical(p, m), ctx.tenant_id)
                 r = reason if not errors else f"fallback#{len(errors)} after: {errors[-1][:80]}; {reason}"

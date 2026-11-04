@@ -77,3 +77,13 @@ def client_factory(upstream):
 @pytest.fixture
 def master_key():
     return Fernet.generate_key().decode()
+
+
+@pytest.fixture(autouse=True)
+def _default_core(monkeypatch):
+    """公开仓库测试只测默认实现：即使本机装了私有核心插件也不加载。"""
+    from autollm_gate import plugins
+    monkeypatch.setenv("AUTOLLM_CORE_PLUGIN", "off")
+    plugins.reset()
+    yield
+    plugins.reset()

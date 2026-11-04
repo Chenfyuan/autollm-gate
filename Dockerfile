@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # ---------- 前端构建 ----------
 FROM node:22-alpine AS web
 WORKDIR /web
@@ -17,6 +18,16 @@ COPY pyproject.toml ./
 COPY core ./core
 COPY admin ./admin
 RUN pip install --no-cache-dir --no-deps . && useradd -r -u 10001 app
+# ---------- 可选：私有核心插件 ----------
+# 不提供时使用公开默认实现。凭据只通过 BuildKit secret 传入，不会进入任何镜像层：
+#   docker build --build-arg CORE_REPO=Chenfyuan/autollm-gate-core --secret id=core_token,env=CORE_TOKEN .
+ARG CORE_REPO=""
+ARG CORE_REF=main
+RUN --mount=type=secret,id=core_token,required=false \
+    if [ -n "$CORE_REPO" ] && [ -s /run/secrets/core_token ]; then \
+      python -c "import os,urllib.request as u;r=u.Request(f'https://api.github.com/repos/{os.environ[\"CORE_REPO\"]}/tarball/{os.environ[\"CORE_REF\"]}',headers={'Authorization':'Bearer '+open('/run/secrets/core_token').read().strip()});open('/tmp/core.tgz','wb').write(u.urlopen(r).read())" \
+      && pip install --no-cache-dir --no-deps /tmp/core.tgz && rm -f /tmp/core.tgz; \
+    else echo "private core not provided, using default implementation"; fi
 COPY --from=web /web/dist /app/static
 COPY deploy/entrypoint.sh /entrypoint.sh
 USER app

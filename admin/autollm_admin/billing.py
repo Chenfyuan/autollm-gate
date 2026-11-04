@@ -25,14 +25,9 @@ def hash_key(k: str) -> str:
 
 
 def client_ip(request: Request) -> str:
-    """客户端 IP。TRUST_PROXY_HEADERS=1（部署在 nginx 之后）时取 X-Forwarded-For 最左侧地址。"""
-    if os.getenv("TRUST_PROXY_HEADERS") == "1":
-        xff = request.headers.get("x-forwarded-for", "")
-        if xff:
-            return xff.split(",")[0].strip()
-        if request.headers.get("x-real-ip"):
-            return request.headers["x-real-ip"].strip()
-    return request.client.host if request.client else ""
+    """客户端 IP（TRUST_PROXY=1 时按 nginx 写入的头取，规则与登录限流一致）。"""
+    from .security import client_ip as _ip
+    return _ip(request)
 
 
 def split_csv(v: str | None) -> list[str]:
