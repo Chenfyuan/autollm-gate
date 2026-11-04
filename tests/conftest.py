@@ -9,6 +9,7 @@ class MockUpstream:
     """按 URL 模拟各家上游；fail 集合中的 provider 返回 500。"""
     def __init__(self):
         self.fail, self.calls = set(), []
+        self.modes = {}  # provider -> "429" | "503" | "timeout"
 
     def provider_of(self, url):
         h = url.host
@@ -21,6 +22,11 @@ class MockUpstream:
         self.calls.append((p, body, dict(req.headers)))
         if p in self.fail:
             return httpx.Response(500, json={"error": "boom"})
+        mode = self.modes.get(p)
+        if mode == "timeout":
+            raise httpx.ReadTimeout("simulated timeout", request=req)
+        if mode:
+            return httpx.Response(int(mode), json={"error": "simulated " + mode})
         stream = body.get("stream") or "streamGenerateContent" in str(req.url)
         if p == "anthropic":
             if stream:

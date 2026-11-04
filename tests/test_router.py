@@ -67,5 +67,12 @@ def test_session_id_sources():
 
 
 def test_session_store_ttl():
-    s = SessionStore(ttl=-1); s.set("a", "m"); assert s.get("a") is None
-    s = SessionStore(); s.set("a", "m"); assert s.get("a") == "m"
+    import asyncio
+    from autollm_gate.state import MemoryState
+    s = SessionStore(MemoryState(), ttl=1)
+    async def go():
+        await s.set("a", "m")
+        assert await s.get("a") == "m"
+        s.state._kv = {k: (v, 1.0) for k, (v, _) in s.state._kv.items()}  # 人为过期
+        assert await s.get("a") is None
+    asyncio.run(go())
