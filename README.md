@@ -33,13 +33,16 @@ AutoLLM Gate 放在你的应用和各家模型之间：
 
 | 模块 | 内容 |
 |---|---|
-| 网关 | `/v1/chat/completions`、`/v1/messages`、`/v1/responses`，流式与非流式；自动路由；会话粘性（Redis 共享） |
-| 稳定性 | 失败切换（429 / 5xx / 超时）、按上游熔断、按 IP 与按密钥限流、`/healthz` `/readyz`、Prometheus `/metrics` |
+| 网关 | `/v1/chat/completions`、`/v1/messages`、`/v1/responses`、`/v1/embeddings`，流式与非流式；自动路由；会话粘性（Redis 共享） |
+| 稳定性 | 失败切换（429 / 5xx / 超时）、按上游熔断（多实例经 Redis 共享）、按 IP 与按密钥限流、`/healthz` `/readyz`、Prometheus `/metrics` |
 | 计费 | 原子预扣与结算、平台与租户两级加价、自带密钥服务费，改动即时同步到所有实例 |
-| 开发者控制台 | 注册登录、概览、用量分析、账单明细、API 密钥、余额充值、模型价格、快速开始 |
-| 运营后台 | 收入与成本概览、租户管理、模型与价格、上游密钥（加密存储、只显示掩码）、监控告警、管理员 |
+| 密钥策略 | 每个 API 密钥可单独设置模型白名单（支持前缀通配）、IP / CIDR 白名单、有效期、消费上限、每分钟请求数，修改即时生效 |
+| 日志与审计 | 请求日志按租户 / 模型 / 状态 / 日期筛选、分页、导出 CSV；后台与控制台写操作自动记审计日志 |
+| 开发者控制台 | 注册登录、概览、用量分析、账单明细、请求日志、API 密钥（含访问策略）、余额充值、模型价格、快速开始 |
+| 运营后台 | 收入与成本概览、租户管理、模型与价格、上游密钥（加密存储、只显示掩码）、请求日志、监控告警、管理员、审计日志 |
 | 告警 | 上游错误率突增、余额不足、月度额度将满；推送到飞书、企业微信、钉钉、Slack 或通用 Webhook |
-| 安全 | argon2id 密码哈希、HttpOnly 签名 Cookie + CSRF 校验、Webhook 防 SSRF、生产模式启动检查 |
+| 安全 | argon2id 密码哈希、HttpOnly 签名 Cookie + CSRF 校验、Webhook 防 SSRF、生产模式启动检查；Webhook 直连已校验的 IP，防 DNS 重绑定 |
+| 插件化核心 | 路由与计价通过插件接口加载，公开仓库自带可运行的默认实现 |
 
 ## 实测数据
 
@@ -48,6 +51,7 @@ AutoLLM Gate 放在你的应用和各家模型之间：
 | 场景 | 结果 |
 |---|---|
 | 并发 50，持续 60 秒 | 23,496 次请求，390.7 RPS，p50 109ms，p95 236ms，错误率 0% |
+| v0.3 回归：并发 50，持续 30 秒（每次请求都经过密钥策略检查） | 9,175 次请求，304.3 RPS，p50 144ms，p95 324ms，错误率 0%；结束后冻结额为 0，无负余额 |
 | 运行中停掉一家上游 30 秒（20 RPS） | 1,379 次请求 0 失败；0.15 秒开始切换，0.71 秒熔断生效，恢复后 0.43 秒流量回切 |
 
 ## 架构
@@ -104,8 +108,10 @@ resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "
 | ![运营概览](docs/assets/admin-overview.png) | ![监控告警](docs/assets/admin-monitoring.png) |
 | **上游密钥** | **租户管理** |
 | ![上游密钥](docs/assets/admin-upstreams.png) | ![租户管理](docs/assets/admin-tenants.png) |
-| **账单明细** | |
-| ![账单明细](docs/assets/tenant-billing.png) | |
+| **账单明细** | **请求日志** |
+| ![账单明细](docs/assets/tenant-billing.png) | ![请求日志](docs/assets/admin-request-logs.png) |
+| **密钥访问策略** | **审计日志** |
+| ![密钥访问策略](docs/assets/tenant-keys-policy.png) | ![审计日志](docs/assets/admin-audit.png) |
 
 截图中的租户、金额均为演示数据。
 
@@ -113,14 +119,17 @@ resp = client.chat.completions.create(model="auto", messages=[{"role": "user", "
 
 已完成（v0.2）：三协议网关、自动路由与失败切换、熔断、限流、原子计费、开发者控制台、运营后台、监控告警、高可用部署。
 
+已完成（v0.3）：密钥级访问策略、请求日志检索与导出、审计日志、`/v1/embeddings`、多实例共享熔断、Webhook 防 DNS 重绑定、核心逻辑插件化。与主流平台的逐项对比见 [竞品对比与规划](docs/COMPETITIVE.md)。
+
 规划中：
 
 - 真实支付渠道（微信支付 / 支付宝 / Stripe）——目前为占位，尚不可用
 - 接入真实模型的端到端测试——目前只在假上游上验证
-- 熔断状态在多实例间共享（目前各实例独立判断）
-- 超时切换的整栈演练（目前只有单元测试）
+- 同一上游多密钥加权负载均衡、渠道健康检查与自动禁用
+- TPM 限流、响应缓存、护栏（PII 脱敏 / 注入检测）、请求正文记录与会话追踪
+- 团队成员与角色权限、SSO
+- 图像 / 音频接口；Azure OpenAI、Bedrock 等更多上游
 - Postgres / Redis / nginx 冗余与内置 TLS（目前为单点，需自行在前面加 TLS）
-- Webhook 发送时直连已校验的 IP，消除 DNS 重绑定窗口
 - 监控页 p50/p95 改为精确值（目前为直方图近似）
 
 ## 常见问题
