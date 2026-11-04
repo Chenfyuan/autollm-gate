@@ -156,3 +156,7 @@ cd site && npm ci && npm run build   # 官网，产物在 site/dist
 ## 许可
 
 源码可查看，但**不是开源软件**。版权所有（All rights reserved），未经书面许可，不得使用、复制、修改或分发。详见 [LICENSE](LICENSE)。
+
+## 商务联系
+
+预约演示、商用授权与私有部署：chenfyuanl [at] gmail.com。价格见 [官网](https://chenfyuan.github.io/autollm-gate/#pricing) 与 [docs/PRICING.md](docs/PRICING.md)。问题反馈请提 GitHub Issues。

@@ -27,3 +27,7 @@ html{scroll-behavior:smooth}
 @media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none}.card{transition:none}html{scroll-behavior:auto}}
 .card p{overflow-wrap:anywhere}
 .ctab{white-space:nowrap}
+.btn1{@apply inline-block rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-500}
+.btn2{@apply inline-block rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800}
+.inp{@apply rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100}
+.hero::before{display:none}
